@@ -5,6 +5,8 @@ Authentication Service
 
 ## Developing
 
+[![GoDoc](https://godoc.org/breve.us/authsvc?status.svg)](http://godoc.org/breve.us/authsvc)
+
 This project is written in Go, and follows standard Go development practices.
 
 Vendoring of dependencies is done with the [`dep`](https://golang.github.io/dep/) tool.
