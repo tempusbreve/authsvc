@@ -1,6 +1,8 @@
 FROM scratch
 
-MAINTAINER John Weldon <johnweldon4@gmail.com>
+LABEL maintainer="John Weldon <johnweldon4@gmail.com>" \
+      company="Tempus Breve Software" \
+      description="OAuth2 API that emulates Gitlab"
 
 COPY public /public/
 ADD api api
