@@ -6,6 +6,7 @@ func RegisterAPI(verbose bool) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/oauth/", newOAuthHandler())
 	mux.Handle("/api/", newAPIHandler())
+	mux.Handle("/login/", newLoginHandler(nil))
 	return mux
 }
 

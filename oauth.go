@@ -83,15 +83,15 @@ func (h *oauth) handleApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Form.Get("approve") != "Approve" {
-		writeRedirect(w, a.RedirectURI, map[string]string{"error": "access_denied"})
+		writeRedirect(w, r, a.RedirectURI, map[string]string{"error": "access_denied"})
 		return
 	}
 	if a.ResponseType != "code" {
-		writeRedirect(w, a.RedirectURI, map[string]string{"error": "unsupported_response_type"})
+		writeRedirect(w, r, a.RedirectURI, map[string]string{"error": "unsupported_response_type"})
 		return
 	}
 	code := h.addToCache(a)
-	writeRedirect(w, a.RedirectURI, map[string]string{"code": code, "state": a.State})
+	writeRedirect(w, r, a.RedirectURI, map[string]string{"code": code, "state": a.State})
 }
 
 func (h *oauth) handleToken(w http.ResponseWriter, r *http.Request) {

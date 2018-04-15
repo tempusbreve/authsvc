@@ -15,7 +15,7 @@ func queryKeys(v url.Values) []string {
 	return keys
 }
 
-func writeRedirect(w http.ResponseWriter, uri string, additionalParams map[string]string) {
+func writeRedirect(w http.ResponseWriter, r *http.Request, uri string, additionalParams map[string]string) {
 	dest, err := url.Parse(uri)
 	if err != nil {
 		writeJSONCode(http.StatusInternalServerError, w, err)
@@ -26,9 +26,7 @@ func writeRedirect(w http.ResponseWriter, uri string, additionalParams map[strin
 		q.Set(k, v)
 	}
 	dest.RawQuery = q.Encode()
-	w.Header().Set("Location", dest.String())
-	w.WriteHeader(http.StatusTemporaryRedirect)
-	return
+	http.Redirect(w, r, dest.String(), http.StatusSeeOther)
 }
 
 func writeJSON(w http.ResponseWriter, o interface{}) {
