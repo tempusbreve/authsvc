@@ -17,6 +17,12 @@
   version = "v1.1.1"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/phyber/negroni-gzip"
+  packages = ["gzip"]
+  revision = "ef6356a5d02936b65ca8e60b604ed6b078aac8d3"
+
+[[projects]]
   name = "github.com/rs/cors"
   packages = ["."]
   revision = "feef513b9575b32f84bafa580aad89b011259019"
@@ -37,6 +43,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "436ed26bdbabf028f17326e2bd7ea57fb72cb7ecbe4b40927c8aa253e62e4978"
+  inputs-digest = "363abdbb62d52d42435cf7523e72a8b665758e7d6f88f122f343dcd0fe13888f"
   solver-name = "gps-cdcl"
   solver-version = 1

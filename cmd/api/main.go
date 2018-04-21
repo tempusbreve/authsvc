@@ -8,6 +8,7 @@ import (
 
 	"breve.us/authsvc"
 
+	"github.com/phyber/negroni-gzip/gzip"
 	"github.com/rs/cors"
 	"github.com/unrolled/secure"
 	"github.com/urfave/negroni"
@@ -52,6 +53,7 @@ func main() {
 		authsvc.DebugLogger(os.Stderr, verbose),
 		negroni.HandlerFunc(sec.HandlerFuncWithNext),
 		negroni.HandlerFunc(c.ServeHTTP),
+		negroni.Handler(gzip.Gzip(gzip.DefaultCompression)),
 		negroni.NewStatic(http.Dir(public)),
 		negroni.Wrap(authsvc.RegisterAPI(verbose)),
 	)
