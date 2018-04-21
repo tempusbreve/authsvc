@@ -8,6 +8,7 @@ import (
 
 	"breve.us/authsvc"
 
+	"github.com/rs/cors"
 	"github.com/unrolled/secure"
 	"github.com/urfave/negroni"
 )
@@ -38,10 +39,19 @@ func main() {
 		IsDevelopment: true,
 	})
 
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"}, // TODO: introduce configuration
+		AllowedMethods:   []string{"GET", "POST"},
+		AllowCredentials: true,
+
+		Debug: true,
+	})
+
 	n := negroni.New(
 		negroni.NewRecovery(),
 		authsvc.DebugLogger(os.Stderr, verbose),
 		negroni.HandlerFunc(sec.HandlerFuncWithNext),
+		negroni.HandlerFunc(c.ServeHTTP),
 		negroni.NewStatic(http.Dir(public)),
 		negroni.Wrap(authsvc.RegisterAPI(verbose)),
 	)
@@ -55,5 +65,7 @@ func main() {
 	}
 
 	log.Printf("listening on %s\n", listen)
-	log.Fatal(s.ListenAndServe())
+	if err := s.ListenAndServe(); err != nil {
+		log.Fatal(err)
+	}
 }
