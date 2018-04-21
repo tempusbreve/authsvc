@@ -8,6 +8,7 @@ import (
 
 	"breve.us/authsvc"
 
+	"github.com/unrolled/secure"
 	"github.com/urfave/negroni"
 )
 
@@ -29,9 +30,18 @@ func main() {
 		public = p
 	}
 
+	sec := secure.New(secure.Options{
+		BrowserXssFilter:   true,
+		ContentTypeNosniff: true,
+		FrameDeny:          true,
+
+		IsDevelopment: true,
+	})
+
 	n := negroni.New(
 		negroni.NewRecovery(),
 		authsvc.DebugLogger(os.Stderr, verbose),
+		negroni.HandlerFunc(sec.HandlerFuncWithNext),
 		negroni.NewStatic(http.Dir(public)),
 		negroni.Wrap(authsvc.RegisterAPI(verbose)),
 	)

@@ -31,7 +31,6 @@ func writeRedirect(w http.ResponseWriter, r *http.Request, uri string, additiona
 
 func writeJSON(w http.ResponseWriter, o interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if err := json.NewEncoder(w).Encode(o); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"error": "%v"}`, err)
@@ -40,7 +39,6 @@ func writeJSON(w http.ResponseWriter, o interface{}) {
 
 func writeJSONCode(code int, w http.ResponseWriter, o interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
 	if o != nil {
 		if err := json.NewEncoder(w).Encode(o); err != nil {
