@@ -9,7 +9,7 @@ import (
 
 func queryKeys(v url.Values) []string {
 	var keys []string
-	for k, _ := range v {
+	for k := range v {
 		keys = append(keys, k)
 	}
 	return keys
