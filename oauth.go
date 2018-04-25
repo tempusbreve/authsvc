@@ -10,10 +10,18 @@ import (
 	"strings"
 
 	"github.com/alecthomas/template"
+	"github.com/gorilla/mux"
 )
 
-func newOAuthHandler() http.Handler {
+func RegisterOAuth(root string) http.Handler {
+	mx := mux.NewRouter()
+	mx.Handle(root, newOAuthHandler(root))
+	return mx
+}
+
+func newOAuthHandler(root string) http.Handler {
 	return &oauth{
+		root:    root,
 		cache:   map[string]*authorize{},
 		clients: map[string]string{},
 		tokens:  map[string]string{},
@@ -21,6 +29,7 @@ func newOAuthHandler() http.Handler {
 }
 
 type oauth struct {
+	root    string
 	cache   map[string]*authorize
 	clients map[string]string
 	tokens  map[string]string
@@ -33,11 +42,11 @@ func (h *oauth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch p := r.URL.Path; p {
-	case "/oauth/authorize":
+	case h.root + "authorize":
 		h.handleAuthorize(w, r)
-	case "/oauth/approve":
+	case h.root + "approve":
 		h.handleApprove(w, r)
-	case "/oauth/token":
+	case h.root + "token":
 		h.handleToken(w, r)
 	default:
 		h.handleDefault(w, r)

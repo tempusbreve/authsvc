@@ -1,19 +1,19 @@
 package authsvc // import "breve.us/authsvc"
 
-import "net/http"
+import (
+	"net/http"
 
-func RegisterAPI(verbose bool) http.Handler {
-	mux := http.NewServeMux()
-	mux.Handle("/oauth/", newOAuthHandler())
-	mux.Handle("/api/", newAPIHandler())
-	return mux
-}
+	"github.com/gorilla/mux"
+)
 
-func newAPIHandler() http.Handler {
-	return &api{}
+func RegisterAPI(root string, verbose bool) http.Handler {
+	mx := mux.NewRouter()
+	mx.Handle(root, &api{root: root})
+	return mx
 }
 
 type api struct {
+	root string
 }
 
 func (a *api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +23,7 @@ func (a *api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch p := r.URL.Path; p {
-	case "/api/v4/user":
+	case a.root + "v4/user":
 		a.handleUser(w, r)
 	default:
 		obj := struct {
