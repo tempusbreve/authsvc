@@ -24,9 +24,12 @@ var (
 	apiRoot   = "/api/"
 	authRoot  = "/auth/"
 	oauthRoot = "/oauth/"
+
+	seeder authsvc.Seeder
 )
 
 func main() {
+	var err error
 	if p := os.Getenv("PORT"); p != "" {
 		listen = ":" + p
 	}
@@ -36,6 +39,11 @@ func main() {
 	}
 	if p := os.Getenv("PUBLIC_DIR"); p != "" {
 		public = p
+	}
+	if sf := os.Getenv("SEED_FILE"); sf != "" {
+		if seeder, err = authsvc.NewFileSeeder(sf); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	sec := secure.New(secure.Options{
@@ -65,7 +73,7 @@ func main() {
 
 	r := mux.NewRouter()
 
-	l := authsvc.NewAuthenticationMiddleware("myrealm", authRoot, nil)
+	l := authsvc.NewAuthenticationMiddleware("myrealm", authRoot, seeder)
 	r.PathPrefix(authRoot).Handler(n.With(negroni.Wrap(l.LoginHandler())))
 
 	a := n.With(negroni.Handler(l))
@@ -83,7 +91,7 @@ func main() {
 	}
 
 	log.Printf("listening on %s\n", listen)
-	if err := s.ListenAndServe(); err != nil {
+	if err = s.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

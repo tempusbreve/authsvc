@@ -37,7 +37,7 @@ var (
 
 func NewAuthenticationMiddleware(realm string, root string, seeder Seeder) *authenticationMiddleware {
 	if seeder == nil {
-		seeder = &defseeder{}
+		seeder = NewSeeder()
 	}
 	return &authenticationMiddleware{
 		realm:    realm,
@@ -59,6 +59,7 @@ func (m *authenticationMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	case ErrNoAuthToken:
 		m.unauthorized(w, r, nil)
 	default:
+		m.clearLoginCookie(w)
 		m.unauthorized(w, r, err)
 	}
 }
@@ -185,14 +186,5 @@ func (m *authenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	fmt.Fprintf(w, `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta http-equiv="refresh" content="0;URL='%s'" />
-</head>
-<body>
-</body>
-</html>
-`, login.String())
+	fmt.Fprintf(w, `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;URL='%s'" /></head><body></body></html>`, login.String())
 }
