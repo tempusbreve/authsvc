@@ -20,6 +20,7 @@ var (
 	ErrNoAuthToken       = errors.New("no_auth")
 
 	loginPath     = "login/"
+	logoutPath    = "logout/"
 	cookieName    = "authsvc-login-cookie"
 	loginLifetime = 60 * 60 * 2 // 2 hours
 
@@ -67,6 +68,7 @@ func (m *authenticationMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Requ
 func (m *authenticationMiddleware) LoginHandler() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc(m.authRoot+loginPath, m.loginPOST).Methods("POST")
+	r.HandleFunc(m.authRoot+logoutPath, m.logoutPOST).Methods("POST")
 	return r
 }
 
@@ -76,9 +78,6 @@ func (m *authenticationMiddleware) loginPOST(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	switch button := r.Form.Get("submit"); button {
-	case "Logout":
-		m.clearLoginCookie(w)
-		writeRedirect(w, r, "/", map[string]string{"msg": "logged out"})
 	case "Login":
 		username := r.Form.Get("username")
 		password := r.Form.Get("password")
@@ -88,6 +87,20 @@ func (m *authenticationMiddleware) loginPOST(w http.ResponseWriter, r *http.Requ
 		}
 		m.setLoginCookie(username, w)
 		writeRedirect(w, r, "/", map[string]string{"msg": "logged in"})
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+	}
+}
+
+func (m *authenticationMiddleware) logoutPOST(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	switch button := r.Form.Get("submit"); button {
+	case "Logout":
+		m.clearLoginCookie(w)
+		writeRedirect(w, r, "/", map[string]string{"msg": "logged out"})
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
