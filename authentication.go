@@ -13,12 +13,15 @@ import (
 	"github.com/gorilla/securecookie"
 )
 
+// Exported Errors
 var (
 	ErrInvalidRequest    = errors.New("invalid_request")
 	ErrInvalidToken      = errors.New("invalid_token")
 	ErrInsufficientScope = errors.New("insufficient_scope")
 	ErrNoAuthToken       = errors.New("no_auth")
+)
 
+var (
 	loginPath     = "login/"
 	logoutPath    = "logout/"
 	cookieName    = "authsvc-login-cookie"
@@ -36,24 +39,29 @@ var (
 	}
 )
 
-func NewAuthenticationMiddleware(realm string, root string, seeder Seeder) *authenticationMiddleware {
+// NewAuthenticationMiddleware returns a middlware suitable for authentication.
+func NewAuthenticationMiddleware(realm string, root string, seeder Seeder) (*AuthenticationMiddleware, error) {
+	var err error
 	if seeder == nil {
-		seeder = NewSeeder()
+		if seeder, err = NewSeeder(Generate(HashKeySize), Generate(BlockKeySize)); err != nil {
+			return nil, err
+		}
 	}
-	return &authenticationMiddleware{
+	return &AuthenticationMiddleware{
 		realm:    realm,
 		authRoot: root,
 		cookie:   securecookie.New(seeder.HashKey(), seeder.BlockKey()),
-	}
+	}, nil
 }
 
-type authenticationMiddleware struct {
+// AuthenticationMiddleware enforces authentication on protected routes.
+type AuthenticationMiddleware struct {
 	realm    string
 	authRoot string
 	cookie   *securecookie.SecureCookie
 }
 
-func (m *authenticationMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request, n http.HandlerFunc) {
+func (m *AuthenticationMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request, n http.HandlerFunc) {
 	switch err := m.authenticated(r); err {
 	case nil:
 		n(w, r)
@@ -65,14 +73,15 @@ func (m *authenticationMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (m *authenticationMiddleware) LoginHandler() http.Handler {
+// LoginHandler returns a router that handles the login and logout routes.
+func (m *AuthenticationMiddleware) LoginHandler() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc(m.authRoot+loginPath, m.loginPOST).Methods("POST")
 	r.HandleFunc(m.authRoot+logoutPath, m.logoutPOST).Methods("POST")
 	return r
 }
 
-func (m *authenticationMiddleware) loginPOST(w http.ResponseWriter, r *http.Request) {
+func (m *AuthenticationMiddleware) loginPOST(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -92,7 +101,7 @@ func (m *authenticationMiddleware) loginPOST(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (m *authenticationMiddleware) logoutPOST(w http.ResponseWriter, r *http.Request) {
+func (m *AuthenticationMiddleware) logoutPOST(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -106,7 +115,7 @@ func (m *authenticationMiddleware) logoutPOST(w http.ResponseWriter, r *http.Req
 	}
 }
 
-func (m *authenticationMiddleware) setLoginCookie(username string, w http.ResponseWriter) {
+func (m *AuthenticationMiddleware) setLoginCookie(username string, w http.ResponseWriter) {
 	data := map[string]string{"username": username}
 	switch v, err := m.cookie.Encode(cookieName, data); err {
 	case nil:
@@ -126,7 +135,7 @@ func (m *authenticationMiddleware) setLoginCookie(username string, w http.Respon
 		writeJSONCode(http.StatusInternalServerError, w, "error logging in")
 	}
 }
-func (m *authenticationMiddleware) clearLoginCookie(w http.ResponseWriter) {
+func (m *AuthenticationMiddleware) clearLoginCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:   cookieName,
 		Value:  "",
@@ -135,7 +144,7 @@ func (m *authenticationMiddleware) clearLoginCookie(w http.ResponseWriter) {
 	})
 }
 
-func (m *authenticationMiddleware) validate(username, password string) bool {
+func (m *AuthenticationMiddleware) validate(username, password string) bool {
 	if username == "" || password == "" {
 		return false
 	}
@@ -145,7 +154,7 @@ func (m *authenticationMiddleware) validate(username, password string) bool {
 	return false
 }
 
-func (m *authenticationMiddleware) authenticated(r *http.Request) error {
+func (m *AuthenticationMiddleware) authenticated(r *http.Request) error {
 	switch c, err := r.Cookie(cookieName); err {
 	case nil:
 		data := map[string]string{}
@@ -161,9 +170,9 @@ func (m *authenticationMiddleware) authenticated(r *http.Request) error {
 	}
 }
 
-func (m *authenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.Request, err error) {
+func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.Request, err error) {
 	var b strings.Builder
-	b.WriteString("authsvc")
+	_, _ = b.WriteString("authsvc")
 
 	code := http.StatusUnauthorized
 	parts := []string{}
@@ -185,7 +194,7 @@ func (m *authenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.R
 	}
 
 	if len(parts) > 0 {
-		b.WriteString(" " + strings.Join(parts, ", "))
+		_, _ = b.WriteString(" " + strings.Join(parts, ", "))
 	}
 
 	w.WriteHeader(code)

@@ -10,26 +10,29 @@ import (
 	"strings"
 )
 
-func DebugLogger(w io.Writer, verbose bool) *logger {
+// NewDebugMiddleware provides middleware suitable for exhaustive
+// request/response logging.
+func NewDebugMiddleware(w io.Writer, verbose bool) *DebugMiddleware {
 	ll := log.New(w, "[http] ", log.LstdFlags|log.LUTC)
-	return &logger{verbose: verbose, l: ll, o: w}
+	return &DebugMiddleware{verbose: verbose, l: ll, o: w}
 }
 
-type logger struct {
+// DebugMiddleware provides request/response logging.
+type DebugMiddleware struct {
 	verbose bool
 	o       io.Writer
 	l       *log.Logger
 }
 
-func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+func (l *DebugMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	l.requestLogger(r)
 	rw, logResponse := l.responseLogger(r, w)
 	defer logResponse()
 
-	next.ServeHTTP(rw, r)
+	next(rw, r)
 }
 
-func (l *logger) requestLogger(r *http.Request) {
+func (l *DebugMiddleware) requestLogger(r *http.Request) {
 	l.l.Printf("(client %s) %s %s %s [%s]", queryIP(r), r.Host, r.Method, r.URL.Path, r.UserAgent())
 	if l.verbose {
 		b, err := httputil.DumpRequest(r, true)
@@ -45,7 +48,7 @@ func (l *logger) requestLogger(r *http.Request) {
 	}
 }
 
-func (l *logger) responseLogger(r *http.Request, w http.ResponseWriter) (http.ResponseWriter, func()) {
+func (l *DebugMiddleware) responseLogger(r *http.Request, w http.ResponseWriter) (http.ResponseWriter, func()) {
 	rr := httptest.NewRecorder()
 	return rr, func() {
 		for k, v := range rr.HeaderMap {

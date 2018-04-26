@@ -33,7 +33,7 @@ func writeJSON(w http.ResponseWriter, o interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(o); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, `{"error": "%v"}`, err)
+		_, _ = fmt.Fprintf(w, `{"error": "%v"}`, err)
 	}
 }
 
@@ -43,7 +43,7 @@ func writeJSONCode(code int, w http.ResponseWriter, o interface{}) {
 	if o != nil {
 		if err := json.NewEncoder(w).Encode(o); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, `{"error": "%v"}`, err)
+			_, _ = fmt.Fprintf(w, `{"error": "%v"}`, err)
 		}
 	}
 }

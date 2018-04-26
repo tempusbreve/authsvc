@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// RegisterOAuth returns a router that handles OAuth routes.
 func RegisterOAuth(root string) http.Handler {
 	mx := mux.NewRouter()
 	mx.Handle(root, newOAuthHandler(root))
@@ -146,10 +147,10 @@ func (h *oauth) handleToken(w http.ResponseWriter, r *http.Request) {
 
 func (h *oauth) handleDefault(w http.ResponseWriter, r *http.Request) {
 	obj := struct {
-		Url       string
+		URL       string
 		QueryKeys []string
 		Values    interface{}
-	}{Url: r.URL.String(), QueryKeys: queryKeys(r.Form), Values: r.Form}
+	}{URL: r.URL.String(), QueryKeys: queryKeys(r.Form), Values: r.Form}
 
 	writeJSON(w, obj)
 }

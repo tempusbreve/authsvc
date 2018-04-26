@@ -1,29 +1,9 @@
 package authsvc // import "breve.us/authsvc"
 
 import (
-	"log"
-	"net"
 	"net/http"
 	"strings"
 )
-
-func getNetworks(cidrs []string) []*net.IPNet {
-	var safe []*net.IPNet
-	hash := map[string]*net.IPNet{}
-	for _, s := range cidrs {
-		ip := cleanIP(s)
-		_, n, err := net.ParseCIDR(ip)
-		if err != nil {
-			log.Printf("ERROR: invalid safe ip %q: %v", ip, err)
-			continue
-		}
-		if _, ok := hash[ip]; !ok {
-			hash[ip] = n
-			safe = append(safe, n)
-		}
-	}
-	return safe
-}
 
 func queryIP(r *http.Request) string {
 	vars := r.URL.Query()
@@ -36,18 +16,6 @@ func queryIP(r *http.Request) string {
 
 func lastIP(r *http.Request) string {
 	return cleanIP(r.RemoteAddr[:strings.LastIndex(r.RemoteAddr, ":")])
-}
-
-func lastForwarder(r *http.Request) string {
-	var ip string
-	if f := forwarders(r); len(f) > 0 {
-		// get LAST forwarder
-		ip = f[len(f)-1]
-	}
-	if ip == "" {
-		ip = lastIP(r)
-	}
-	return cleanIP(ip)
 }
 
 func remoteIP(r *http.Request) string {

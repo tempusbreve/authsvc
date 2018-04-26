@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// RegisterAPI returns a router for the api.
 func RegisterAPI(root string, verbose bool) http.Handler {
 	mx := mux.NewRouter()
 	mx.Handle(root, &api{root: root})
@@ -27,10 +28,10 @@ func (a *api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.handleUser(w, r)
 	default:
 		obj := struct {
-			Url       string
+			URL       string
 			QueryKeys []string
 			Values    interface{}
-		}{Url: r.URL.String(), QueryKeys: queryKeys(r.Form), Values: r.Form}
+		}{URL: r.URL.String(), QueryKeys: queryKeys(r.Form), Values: r.Form}
 
 		writeJSON(w, obj)
 	}

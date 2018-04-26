@@ -13,4 +13,4 @@ ENV VERBOSE=false
 
 EXPOSE 4884
 
-ENTRYPOINT ["/api"]
+ENTRYPOINT ["/api", "serve"]
