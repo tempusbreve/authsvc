@@ -140,15 +140,13 @@ func (m *AuthenticationMiddleware) setLoginCookie(username string, w http.Respon
 	switch v, err := m.cookie.Encode(cookieName, data); err {
 	case nil:
 		http.SetCookie(w, &http.Cookie{
-			Name:    cookieName,
-			Value:   v,
-			Path:    "/",
-			Expires: time.Now().Add(time.Duration(loginLifetime) * time.Second),
-			MaxAge:  loginLifetime,
-			/*
-				Secure:   true,
-				HttpOnly: true,
-			*/
+			Name:     cookieName,
+			Value:    v,
+			Path:     "/",
+			Expires:  time.Now().Add(time.Duration(loginLifetime) * time.Second),
+			MaxAge:   loginLifetime,
+			Secure:   true,
+			HttpOnly: true,
 		})
 	default:
 		log.Printf("error encoding the cookie %q with username %q: %v", cookieName, username, err)
