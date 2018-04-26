@@ -1,4 +1,4 @@
-package authsvc // import "breve.us/authsvc"
+package common // import "breve.us/authsvc/common"
 
 import (
 	"encoding/base64"
@@ -17,6 +17,13 @@ const (
 type Seeder interface {
 	HashKey() []byte
 	BlockKey() []byte
+}
+
+// NewDefaultSeeder creates random default values for the Seeder. This
+// is only good for one execution run, unless the generated keys are
+// persisted.
+func NewDefaultSeeder() (Seeder, error) {
+	return NewSeeder(Generate(HashKeySize), Generate(BlockKeySize))
 }
 
 // NewSeeder creates a default Seeder from base64 encoded seed values.

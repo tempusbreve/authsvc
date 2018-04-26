@@ -1,4 +1,4 @@
-package authsvc // import "breve.us/authsvc"
+package common // import "breve.us/authsvc/common"
 
 import (
 	"net/http"

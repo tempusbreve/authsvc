@@ -1,4 +1,4 @@
-package authsvc // import "breve.us/authsvc"
+package authentication // import "breve.us/authsvc/authentication"
 
 import (
 	"errors"
@@ -11,6 +11,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
+
+	"breve.us/authsvc/common"
+	"breve.us/authsvc/oauth"
 )
 
 // Exported Errors
@@ -40,40 +43,40 @@ var (
 	}
 )
 
-// Config provides configuration options to the AuthenticationMiddleware.
-type Config struct {
+// Options provides configuration options to the AuthenticationMiddleware.
+type Options struct {
 	Realm       string
-	Seeder      Seeder
+	Seeder      common.Seeder
 	PublicRoots []string
-	OAuth       *OAuthHandler
+	OAuth       *oauth.Handler
 }
 
-// NewAuthenticationMiddleware returns a middlware suitable for authentication.
-func NewAuthenticationMiddleware(root string, config Config) (*AuthenticationMiddleware, error) {
+// NewMiddleware returns a middlware suitable for authentication.
+func NewMiddleware(root string, config Options) (*Middleware, error) {
 	var err error
 	if config.Seeder == nil {
-		if config.Seeder, err = NewSeeder(Generate(HashKeySize), Generate(BlockKeySize)); err != nil {
+		if config.Seeder, err = common.NewDefaultSeeder(); err != nil {
 			return nil, err
 		}
 	}
 	if config.OAuth == nil {
-		config.OAuth = NewOAuthHandler()
+		config.OAuth = oauth.NewHandler()
 	}
-	return &AuthenticationMiddleware{
+	return &Middleware{
 		authRoot: root,
 		config:   config,
 		cookie:   securecookie.New(config.Seeder.HashKey(), config.Seeder.BlockKey()),
 	}, nil
 }
 
-// AuthenticationMiddleware enforces authentication on protected routes.
-type AuthenticationMiddleware struct {
+// Middleware enforces authentication on protected routes.
+type Middleware struct {
 	authRoot string
-	config   Config
+	config   Options
 	cookie   *securecookie.SecureCookie
 }
 
-func (m *AuthenticationMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request, n http.HandlerFunc) {
+func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request, n http.HandlerFunc) {
 	if m.whitelisted(r) {
 		n(w, r)
 		return
@@ -91,14 +94,14 @@ func (m *AuthenticationMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Requ
 }
 
 // LoginHandler returns a router that handles the login and logout routes.
-func (m *AuthenticationMiddleware) LoginHandler() http.Handler {
+func (m *Middleware) LoginHandler() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc(m.authRoot+loginPath, m.loginPOST).Methods("POST")
 	r.HandleFunc(m.authRoot+logoutPath, m.logoutPOST).Methods("POST")
 	return r
 }
 
-func (m *AuthenticationMiddleware) loginPOST(w http.ResponseWriter, r *http.Request) {
+func (m *Middleware) loginPOST(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -116,13 +119,13 @@ func (m *AuthenticationMiddleware) loginPOST(w http.ResponseWriter, r *http.Requ
 		if err != nil {
 			returnURL = "/"
 		}
-		writeRedirect(w, r, returnURL, nil)
+		common.Redirect(w, r, returnURL, nil)
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
 }
 
-func (m *AuthenticationMiddleware) logoutPOST(w http.ResponseWriter, r *http.Request) {
+func (m *Middleware) logoutPOST(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -130,13 +133,13 @@ func (m *AuthenticationMiddleware) logoutPOST(w http.ResponseWriter, r *http.Req
 	switch button := r.Form.Get("submit"); button {
 	case "Logout":
 		m.clearLoginCookie(w)
-		writeRedirect(w, r, "/", map[string]string{"msg": "logged out"})
+		common.Redirect(w, r, "/", map[string]string{"msg": "logged out"})
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
 }
 
-func (m *AuthenticationMiddleware) setLoginCookie(username string, w http.ResponseWriter) {
+func (m *Middleware) setLoginCookie(username string, w http.ResponseWriter) {
 	data := map[string]string{"username": username}
 	switch v, err := m.cookie.Encode(cookieName, data); err {
 	case nil:
@@ -151,10 +154,10 @@ func (m *AuthenticationMiddleware) setLoginCookie(username string, w http.Respon
 		})
 	default:
 		log.Printf("error encoding the cookie %q with username %q: %v", cookieName, username, err)
-		writeJSONCode(http.StatusInternalServerError, w, "error logging in")
+		common.JSONStatusResponse(http.StatusInternalServerError, w, "error logging in")
 	}
 }
-func (m *AuthenticationMiddleware) clearLoginCookie(w http.ResponseWriter) {
+func (m *Middleware) clearLoginCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:   cookieName,
 		Value:  "",
@@ -163,7 +166,7 @@ func (m *AuthenticationMiddleware) clearLoginCookie(w http.ResponseWriter) {
 	})
 }
 
-func (m *AuthenticationMiddleware) validate(username, password string) bool {
+func (m *Middleware) validate(username, password string) bool {
 	if username == "" || password == "" {
 		return false
 	}
@@ -173,7 +176,7 @@ func (m *AuthenticationMiddleware) validate(username, password string) bool {
 	return false
 }
 
-func (m *AuthenticationMiddleware) whitelisted(r *http.Request) bool {
+func (m *Middleware) whitelisted(r *http.Request) bool {
 	path := r.URL.Path
 	for _, root := range m.config.PublicRoots {
 		if strings.HasPrefix(path, root) {
@@ -183,7 +186,7 @@ func (m *AuthenticationMiddleware) whitelisted(r *http.Request) bool {
 	return false
 }
 
-func (m *AuthenticationMiddleware) authenticated(r *http.Request) error {
+func (m *Middleware) authenticated(r *http.Request) error {
 	if r.Header.Get("Authorization") != "" {
 		if scopes, err := m.config.OAuth.Authorized(r); err == nil && len(scopes) > 0 {
 			// TODO: validate scopes
@@ -205,7 +208,7 @@ func (m *AuthenticationMiddleware) authenticated(r *http.Request) error {
 	}
 }
 
-func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, orig *url.URL, err error) {
+func (m *Middleware) unauthorized(w http.ResponseWriter, originalURL fmt.Stringer, err error) {
 	var b strings.Builder
 	_, _ = b.WriteString("authsvc")
 
@@ -232,7 +235,7 @@ func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, orig *url
 		_, _ = b.WriteString(" " + strings.Join(parts, ", "))
 	}
 
-	login := makeRedirect(m.authRoot+loginPath, orig)
+	login := makeRedirect(m.authRoot+loginPath, originalURL)
 	w.WriteHeader(code)
 	w.Header().Set("WWW-Authenticate", b.String())
 	w.Header().Set("Location", login.String())
@@ -240,18 +243,16 @@ func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, orig *url
 	fmt.Fprintf(w, `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;URL='%s'" /></head><body></body></html>`, login.String())
 }
 
-func makeRedirect(path string, orig *url.URL) *url.URL {
+func makeRedirect(target string, originalURL fmt.Stringer) fmt.Stringer {
 	var (
 		u   *url.URL
 		err error
 	)
-	if u, err = url.Parse(path); err != nil {
-		return orig
+	if u, err = url.Parse(target); err != nil {
+		return originalURL
 	}
-
 	v := u.Query()
-	v.Set(redirectParam, url.QueryEscape(orig.String()))
+	v.Set(redirectParam, url.QueryEscape(originalURL.String()))
 	u.RawQuery = v.Encode()
-
 	return u
 }

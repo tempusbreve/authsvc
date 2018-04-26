@@ -14,11 +14,14 @@ import (
 	"github.com/urfave/cli"
 	"github.com/urfave/negroni"
 
-	"breve.us/authsvc"
+	"breve.us/authsvc/authentication"
+	"breve.us/authsvc/common"
+	"breve.us/authsvc/oauth"
+	"breve.us/authsvc/user"
 )
 
 var (
-	apiRoot   = "/api/"
+	userRoot  = "/api/v4/user"
 	authRoot  = "/auth/"
 	oauthRoot = "/oauth/"
 	version   = "0.0.1"
@@ -50,13 +53,13 @@ var (
 		Name:   "seedhash",
 		Usage:  "base64 encoded seed hash (default is transient)",
 		EnvVar: "SEED_HASH",
-		Value:  authsvc.Generate(authsvc.HashKeySize),
+		Value:  common.Generate(common.HashKeySize),
 	}
 	seedBlockFlag = cli.StringFlag{
 		Name:   "seedblock",
 		Usage:  "base64 encoded seed block (default is transient)",
 		EnvVar: "SEED_BLOCK",
-		Value:  authsvc.Generate(authsvc.BlockKeySize),
+		Value:  common.Generate(common.BlockKeySize),
 	}
 	corsOriginsFlag = cli.StringSliceFlag{
 		Name:   "cors_origins",
@@ -90,19 +93,19 @@ func main() {
 func serve(ctx *cli.Context) error {
 	listen := fmt.Sprintf(":%d", ctx.Int("port"))
 	verbose := ctx.Bool("verbose")
-	seeder, err := authsvc.NewSeeder(ctx.String("seedhash"), ctx.String("seedblock"))
+	seeder, err := common.NewSeeder(ctx.String("seedhash"), ctx.String("seedblock"))
 	if err != nil {
 		return err
 	}
 
-	config := authsvc.Config{
+	opts := authentication.Options{
 		Realm:       ctx.String("realm"),
 		Seeder:      seeder,
 		PublicRoots: []string{path.Join(oauthRoot, "token")},
-		OAuth:       authsvc.NewOAuthHandler(),
+		OAuth:       oauth.NewHandler(),
 	}
 
-	l, err := authsvc.NewAuthenticationMiddleware(authRoot, config)
+	l, err := authentication.NewMiddleware(authRoot, opts)
 	if err != nil {
 		return err
 	}
@@ -125,7 +128,7 @@ func serve(ctx *cli.Context) error {
 
 	n := negroni.New(
 		negroni.NewRecovery(),
-		authsvc.NewDebugMiddleware(os.Stderr, verbose),
+		common.NewDebugMiddleware(os.Stderr, verbose),
 		negroni.HandlerFunc(sec.HandlerFuncWithNext),
 		negroni.HandlerFunc(c.ServeHTTP),
 		negroni.NewStatic(http.Dir(ctx.String("public"))),
@@ -136,8 +139,8 @@ func serve(ctx *cli.Context) error {
 	r.PathPrefix(authRoot).Handler(n.With(negroni.Wrap(l.LoginHandler())))
 
 	a := n.With(negroni.Handler(l))
-	r.PathPrefix(apiRoot).Handler(a.With(negroni.Wrap(authsvc.RegisterAPI(apiRoot, verbose))))
-	r.PathPrefix(oauthRoot).Handler(a.With(negroni.Wrap(authsvc.RegisterOAuth(oauthRoot, config.OAuth))))
+	r.PathPrefix(userRoot).Handler(a.With(negroni.Wrap(user.RegisterAPI(userRoot, verbose))))
+	r.PathPrefix(oauthRoot).Handler(a.With(negroni.Wrap(opts.OAuth.RegisterAPI(oauthRoot))))
 
 	r.PathPrefix("/").Handler(n.With(negroni.WrapFunc(defaultHandlerFn)))
 

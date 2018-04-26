@@ -1,4 +1,4 @@
-package authsvc // import "breve.us/authsvc"
+package oauth // import "breve.us/authsvc/oauth"
 
 import (
 	"encoding/base64"
@@ -13,6 +13,8 @@ import (
 
 	"github.com/alecthomas/template"
 	"github.com/gorilla/mux"
+
+	"breve.us/authsvc/common"
 )
 
 // Error Values
@@ -29,8 +31,8 @@ const (
 	ScopeAll = "all"
 )
 
-// RegisterOAuth returns a router that handles OAuth routes.
-func RegisterOAuth(root string, h *OAuthHandler) http.Handler {
+// RegisterAPI returns a router that handles OAuth routes.
+func (h *Handler) RegisterAPI(root string) http.Handler {
 	mx := mux.NewRouter()
 	mx.Path(path.Join(root, "authorize")).HandlerFunc(h.handleAuthorize).Methods("GET")
 	mx.Path(path.Join(root, "approve")).HandlerFunc(h.handleApprove).Methods("GET")
@@ -39,18 +41,17 @@ func RegisterOAuth(root string, h *OAuthHandler) http.Handler {
 	return mx
 }
 
-// NewOAuthHandler creates and initializes a new OAuthHandler
-func NewOAuthHandler() *OAuthHandler {
-	return &OAuthHandler{
+// NewHandler creates and initializes a new OAuthHandler
+func NewHandler() *Handler {
+	return &Handler{
 		cache:   map[string]*authorize{},
 		clients: map[string]string{},
 		tokens:  map[string]string{},
 	}
 }
 
-// OAuthHandler provides OAuth2 capabilities.
-type OAuthHandler struct {
-	root    string
+// Handler provides OAuth2 capabilities.
+type Handler struct {
 	cache   map[string]*authorize
 	clients map[string]string
 	tokens  map[string]string
@@ -58,7 +59,7 @@ type OAuthHandler struct {
 
 // Authorized returns the authorized scopes for a request, or an error
 // if the request does not have sufficient authorization.
-func (h *OAuthHandler) Authorized(r *http.Request) ([]string, error) {
+func (h *Handler) Authorized(r *http.Request) ([]string, error) {
 	auth := r.Header.Get("Authorization")
 	if auth != "" {
 		switch {
@@ -71,7 +72,7 @@ func (h *OAuthHandler) Authorized(r *http.Request) ([]string, error) {
 	return nil, ErrNotAuthorized
 }
 
-func (h *OAuthHandler) validToken(token string) bool {
+func (h *Handler) validToken(token string) bool {
 	if id, ok := h.tokens[token]; ok {
 		if tok, ok := h.clients[id]; ok && tok == token {
 			return true
@@ -80,94 +81,94 @@ func (h *OAuthHandler) validToken(token string) bool {
 	return false
 }
 
-func (h *OAuthHandler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		writeJSONCode(http.StatusBadRequest, w, err.Error())
+		common.JSONStatusResponse(http.StatusBadRequest, w, err.Error())
 		return
 	}
 
 	a := parseAuthorize(r.URL.Query())
 	if err := a.valid(); err != nil {
-		writeJSONCode(http.StatusForbidden, w, err.Error())
+		common.JSONStatusResponse(http.StatusForbidden, w, err.Error())
 		return
 	}
 	if !h.checkClient(a.ClientID) {
-		writeJSONCode(http.StatusForbidden, w, "invalid client id")
+		common.JSONStatusResponse(http.StatusForbidden, w, "invalid client id")
 		return
 	}
 	if !h.checkRedirect(a) {
-		writeJSONCode(http.StatusForbidden, w, "invalid redirect uri")
+		common.JSONStatusResponse(http.StatusForbidden, w, "invalid redirect uri")
 		return
 	}
 	h.addToCache(a)
 	a.serveForm(w)
 }
 
-func (h *OAuthHandler) handleApprove(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleApprove(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		writeJSONCode(http.StatusBadRequest, w, err.Error())
+		common.JSONStatusResponse(http.StatusBadRequest, w, err.Error())
 		return
 	}
 
 	a, ok := h.checkCorrelation(r.Form.Get("corr"))
 	if !ok {
-		writeJSONCode(http.StatusForbidden, w, "invalid correlation")
+		common.JSONStatusResponse(http.StatusForbidden, w, "invalid correlation")
 		return
 	}
 	if r.Form.Get("approve") != "Approve" {
-		writeRedirect(w, r, a.RedirectURI, map[string]string{"error": "access_denied"})
+		common.Redirect(w, r, a.RedirectURI, map[string]string{"error": "access_denied"})
 		return
 	}
 	if a.ResponseType != "code" {
-		writeRedirect(w, r, a.RedirectURI, map[string]string{"error": "unsupported_response_type"})
+		common.Redirect(w, r, a.RedirectURI, map[string]string{"error": "unsupported_response_type"})
 		return
 	}
 	code := h.addToCache(a)
-	writeRedirect(w, r, a.RedirectURI, map[string]string{"code": code, "state": a.State})
+	common.Redirect(w, r, a.RedirectURI, map[string]string{"code": code, "state": a.State})
 }
 
-func (h *OAuthHandler) handleToken(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		writeJSONCode(http.StatusBadRequest, w, err.Error())
+		common.JSONStatusResponse(http.StatusBadRequest, w, err.Error())
 		return
 	}
 
 	t, ok := h.checkToken(r.Form.Get("code"))
 	if !ok {
-		writeJSONCode(http.StatusForbidden, w, "invalid token")
+		common.JSONStatusResponse(http.StatusForbidden, w, "invalid token")
 		return
 	}
 
 	creds, err := decodeClientCredentials(r)
 	if err != nil {
-		writeJSONCode(http.StatusForbidden, w, err.Error())
+		common.JSONStatusResponse(http.StatusForbidden, w, err.Error())
 		return
 	}
 
 	if !h.checkClient(creds.ID) {
-		writeJSONCode(http.StatusForbidden, w, err.Error())
+		common.JSONStatusResponse(http.StatusForbidden, w, err.Error())
 		return
 	}
 
 	switch r.Form.Get("grant_type") {
 	case "authorization_code":
 		if t.ClientID != creds.ID {
-			writeJSONCode(http.StatusForbidden, w, "mismatching client ids")
+			common.JSONStatusResponse(http.StatusForbidden, w, "mismatching client ids")
 			return
 		}
 		h.removeFromCache(t.ID)
 		tok := generateRandomString()
 		h.addClient(tok, creds.ID)
-		writeJSON(w, &bearer{Token: tok, Type: "Bearer"})
+		common.JSONResponse(w, &bearer{Token: tok, Type: "Bearer"})
 	default:
-		writeJSONCode(http.StatusForbidden, w, "unsupported grant type")
+		common.JSONStatusResponse(http.StatusForbidden, w, "unsupported grant type")
 		return
 	}
 }
 
-func (h *OAuthHandler) handleDefault(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleDefault(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		writeJSONCode(http.StatusBadRequest, w, err.Error())
+		common.JSONStatusResponse(http.StatusBadRequest, w, err.Error())
 		return
 	}
 
@@ -175,17 +176,17 @@ func (h *OAuthHandler) handleDefault(w http.ResponseWriter, r *http.Request) {
 		URL       string
 		QueryKeys []string
 		Values    interface{}
-	}{URL: r.URL.String(), QueryKeys: queryKeys(r.Form), Values: r.Form}
+	}{URL: r.URL.String(), QueryKeys: common.QueryParamKeys(r.Form), Values: r.Form}
 
-	writeJSON(w, obj)
+	common.JSONResponse(w, obj)
 }
 
-func (h *OAuthHandler) addClient(tok string, id string) {
+func (h *Handler) addClient(tok string, id string) {
 	h.clients[id] = tok
 	h.tokens[tok] = id
 }
 
-func (h *OAuthHandler) addToCache(a *authorize) string {
+func (h *Handler) addToCache(a *authorize) string {
 	if a.ID != "" {
 		h.removeFromCache(a.ID)
 		a.ID = ""
@@ -195,25 +196,25 @@ func (h *OAuthHandler) addToCache(a *authorize) string {
 	return a.ID
 }
 
-func (h *OAuthHandler) removeFromCache(id string) { delete(h.cache, id) }
+func (h *Handler) removeFromCache(id string) { delete(h.cache, id) }
 
-func (h *OAuthHandler) checkToken(tok string) (*authorize, bool) {
+func (h *Handler) checkToken(tok string) (*authorize, bool) {
 	t, ok := h.cache[tok]
 	log.Printf("checking token %q; got %v/%t", tok, t, ok)
 	return t, ok
 }
 
-func (h *OAuthHandler) checkCorrelation(corr string) (*authorize, bool) {
+func (h *Handler) checkCorrelation(corr string) (*authorize, bool) {
 	// TODO: more validation?
 	return h.checkToken(corr)
 }
 
-func (h *OAuthHandler) checkRedirect(a *authorize) bool {
+func (h *Handler) checkRedirect(a *authorize) bool {
 	// TODO: implement
 	return true
 }
 
-func (h *OAuthHandler) checkClient(id string) bool {
+func (h *Handler) checkClient(id string) bool {
 	// TODO: implement
 	return true
 }
@@ -294,7 +295,7 @@ func (a *authorize) valid() error {
 
 func (a *authorize) serveForm(w http.ResponseWriter) {
 	if err := authorizeForm.Execute(w, a); err != nil {
-		writeJSONCode(http.StatusInternalServerError, w, nil)
+		common.JSONStatusResponse(http.StatusInternalServerError, w, nil)
 	}
 }
 
