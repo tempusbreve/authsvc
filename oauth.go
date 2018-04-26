@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -14,9 +15,22 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// Error Values
+var (
+	ErrNotAuthorized       = errors.New("not authorized")
+	ErrInvalidClient       = errors.New("invalid client")
+	ErrInvalidAuth         = errors.New("invalid auth")
+	ErrMissingRedirect     = errors.New("missing redirect_uri")
+	ErrInvalidResponseType = errors.New("response_type unsupported")
+)
+
+// Scopes
+const (
+	ScopeAll = "all"
+)
+
 // RegisterOAuth returns a router that handles OAuth routes.
-func RegisterOAuth(root string) http.Handler {
-	h := newOAuthHandler(root)
+func RegisterOAuth(root string, h *OAuthHandler) http.Handler {
 	mx := mux.NewRouter()
 	mx.Path(path.Join(root, "authorize")).HandlerFunc(h.handleAuthorize).Methods("GET")
 	mx.Path(path.Join(root, "approve")).HandlerFunc(h.handleApprove).Methods("GET")
@@ -25,27 +39,46 @@ func RegisterOAuth(root string) http.Handler {
 	return mx
 }
 
-func newOAuthHandler(root string) *oauth {
-	return &oauth{
-		root:    root,
+func NewOAuthHandler() *OAuthHandler {
+	return &OAuthHandler{
 		cache:   map[string]*authorize{},
 		clients: map[string]string{},
 		tokens:  map[string]string{},
 	}
 }
 
-type oauth struct {
+type OAuthHandler struct {
 	root    string
 	cache   map[string]*authorize
 	clients map[string]string
 	tokens  map[string]string
 }
 
-func (h *oauth) handleAuthorize(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-	default:
-		writeJSONCode(http.StatusMethodNotAllowed, w, r.Method)
+func (h *OAuthHandler) Authorized(r *http.Request) ([]string, error) {
+	auth := r.Header.Get("Authorization")
+	if auth != "" {
+		switch {
+		case strings.HasPrefix(auth, "Bearer "):
+			if h.validToken(auth[7:]) {
+				return []string{ScopeAll}, nil
+			}
+		}
+	}
+	return nil, ErrNotAuthorized
+}
+
+func (h *OAuthHandler) validToken(token string) bool {
+	if id, ok := h.tokens[token]; ok {
+		if tok, ok := h.clients[id]; ok && tok == token {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *OAuthHandler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeJSONCode(http.StatusBadRequest, w, err.Error())
 		return
 	}
 
@@ -66,7 +99,12 @@ func (h *oauth) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	a.serveForm(w)
 }
 
-func (h *oauth) handleApprove(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthHandler) handleApprove(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeJSONCode(http.StatusBadRequest, w, err.Error())
+		return
+	}
+
 	a, ok := h.checkCorrelation(r.Form.Get("corr"))
 	if !ok {
 		writeJSONCode(http.StatusForbidden, w, "invalid correlation")
@@ -84,7 +122,12 @@ func (h *oauth) handleApprove(w http.ResponseWriter, r *http.Request) {
 	writeRedirect(w, r, a.RedirectURI, map[string]string{"code": code, "state": a.State})
 }
 
-func (h *oauth) handleToken(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthHandler) handleToken(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeJSONCode(http.StatusBadRequest, w, err.Error())
+		return
+	}
+
 	t, ok := h.checkToken(r.Form.Get("code"))
 	if !ok {
 		writeJSONCode(http.StatusForbidden, w, "invalid token")
@@ -118,7 +161,12 @@ func (h *oauth) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *oauth) handleDefault(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthHandler) handleDefault(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeJSONCode(http.StatusBadRequest, w, err.Error())
+		return
+	}
+
 	obj := struct {
 		URL       string
 		QueryKeys []string
@@ -128,12 +176,12 @@ func (h *oauth) handleDefault(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, obj)
 }
 
-func (h *oauth) addClient(tok string, id string) {
+func (h *OAuthHandler) addClient(tok string, id string) {
 	h.clients[id] = tok
 	h.tokens[tok] = id
 }
 
-func (h *oauth) addToCache(a *authorize) string {
+func (h *OAuthHandler) addToCache(a *authorize) string {
 	if a.ID != "" {
 		h.removeFromCache(a.ID)
 		a.ID = ""
@@ -143,24 +191,25 @@ func (h *oauth) addToCache(a *authorize) string {
 	return a.ID
 }
 
-func (h *oauth) removeFromCache(id string) { delete(h.cache, id) }
+func (h *OAuthHandler) removeFromCache(id string) { delete(h.cache, id) }
 
-func (h *oauth) checkToken(tok string) (*authorize, bool) {
+func (h *OAuthHandler) checkToken(tok string) (*authorize, bool) {
 	t, ok := h.cache[tok]
+	log.Printf("checking token %q; got %v/%t", tok, t, ok)
 	return t, ok
 }
 
-func (h *oauth) checkCorrelation(corr string) (*authorize, bool) {
+func (h *OAuthHandler) checkCorrelation(corr string) (*authorize, bool) {
 	// TODO: more validation?
 	return h.checkToken(corr)
 }
 
-func (h *oauth) checkRedirect(a *authorize) bool {
+func (h *OAuthHandler) checkRedirect(a *authorize) bool {
 	// TODO: implement
 	return true
 }
 
-func (h *oauth) checkClient(id string) bool {
+func (h *OAuthHandler) checkClient(id string) bool {
 	// TODO: implement
 	return true
 }
@@ -188,7 +237,7 @@ func decodeClientCredentials(r *http.Request) (clientCredentials, error) {
 	auth := r.Header.Get("Authorization")
 	if auth != "" {
 		if cred.ID != "" {
-			return cred, errors.New("invalid client")
+			return cred, ErrInvalidClient
 		}
 		switch {
 		case strings.HasPrefix(auth, "Basic "):
@@ -198,7 +247,7 @@ func decodeClientCredentials(r *http.Request) (clientCredentials, error) {
 			}
 			a := strings.SplitN(string(data), ":", 2)
 			if len(a) < 2 {
-				return cred, errors.New("invalid auth")
+				return cred, ErrInvalidAuth
 			}
 			cred.ID = a[0]
 			cred.Secret = a[1]
@@ -228,13 +277,13 @@ func parseAuthorize(v url.Values) *authorize {
 
 func (a *authorize) valid() error {
 	if a.RedirectURI == "" {
-		return errors.New("missing redirect_uri")
+		return ErrMissingRedirect
 	}
 	if _, err := url.Parse(a.RedirectURI); err != nil {
 		return err
 	}
 	if a.ResponseType != "code" {
-		return errors.New("response_type unsupported")
+		return ErrInvalidResponseType
 	}
 	return nil
 }

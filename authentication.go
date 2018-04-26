@@ -25,6 +25,7 @@ var (
 	loginPath     = "login/"
 	logoutPath    = "logout/"
 	cookieName    = "authsvc-login-cookie"
+	redirectParam = "redirect_uri"
 	loginLifetime = 60 * 60 * 2 // 2 hours
 
 	messages = map[string]string{
@@ -39,29 +40,44 @@ var (
 	}
 )
 
+type Config struct {
+	Realm       string
+	Seeder      Seeder
+	PublicRoots []string
+	OAuth       *OAuthHandler
+}
+
 // NewAuthenticationMiddleware returns a middlware suitable for authentication.
-func NewAuthenticationMiddleware(realm string, root string, seeder Seeder) (*AuthenticationMiddleware, error) {
+func NewAuthenticationMiddleware(root string, config Config) (*AuthenticationMiddleware, error) {
 	var err error
-	if seeder == nil {
-		if seeder, err = NewSeeder(Generate(HashKeySize), Generate(BlockKeySize)); err != nil {
+	if config.Seeder == nil {
+		if config.Seeder, err = NewSeeder(Generate(HashKeySize), Generate(BlockKeySize)); err != nil {
 			return nil, err
 		}
 	}
+	if config.OAuth == nil {
+		config.OAuth = NewOAuthHandler()
+	}
 	return &AuthenticationMiddleware{
-		realm:    realm,
 		authRoot: root,
-		cookie:   securecookie.New(seeder.HashKey(), seeder.BlockKey()),
+		config:   config,
+		cookie:   securecookie.New(config.Seeder.HashKey(), config.Seeder.BlockKey()),
 	}, nil
 }
 
 // AuthenticationMiddleware enforces authentication on protected routes.
 type AuthenticationMiddleware struct {
-	realm    string
 	authRoot string
+	config   Config
 	cookie   *securecookie.SecureCookie
 }
 
 func (m *AuthenticationMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request, n http.HandlerFunc) {
+	if m.whitelisted(r) {
+		n(w, r)
+		return
+	}
+
 	switch err := m.authenticated(r); err {
 	case nil:
 		n(w, r)
@@ -95,7 +111,7 @@ func (m *AuthenticationMiddleware) loginPOST(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		m.setLoginCookie(username, w)
-		returnURL, err := url.PathUnescape(r.Form.Get("return_url"))
+		returnURL, err := url.PathUnescape(r.Form.Get(redirectParam))
 		if err != nil {
 			returnURL = "/"
 		}
@@ -158,7 +174,23 @@ func (m *AuthenticationMiddleware) validate(username, password string) bool {
 	return false
 }
 
+func (m *AuthenticationMiddleware) whitelisted(r *http.Request) bool {
+	path := r.URL.Path
+	for _, root := range m.config.PublicRoots {
+		if strings.HasPrefix(path, root) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *AuthenticationMiddleware) authenticated(r *http.Request) error {
+	if r.Header.Get("Authorization") != "" {
+		if scopes, err := m.config.OAuth.Authorized(r); err == nil && len(scopes) > 0 {
+			// TODO: validate scopes
+			return nil
+		}
+	}
 	switch c, err := r.Cookie(cookieName); err {
 	case nil:
 		data := map[string]string{}
@@ -180,8 +212,8 @@ func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.R
 
 	code := http.StatusUnauthorized
 	parts := []string{}
-	if m.realm != "" {
-		parts = append(parts, fmt.Sprintf("realm=%q", m.realm))
+	if m.config.Realm != "" {
+		parts = append(parts, fmt.Sprintf("realm=%q", m.config.Realm))
 	}
 	switch err {
 	case nil, ErrNoAuthToken:
@@ -201,16 +233,26 @@ func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.R
 		_, _ = b.WriteString(" " + strings.Join(parts, ", "))
 	}
 
+	login := makeRedirect(m.authRoot+loginPath, r)
 	w.WriteHeader(code)
 	w.Header().Set("WWW-Authenticate", b.String())
-	w.Header().Set("Location", m.authRoot+loginPath)
-
-	login, err := url.Parse(m.authRoot + loginPath + "?return_url=" + url.PathEscape(r.URL.Path+"?"+r.URL.RawQuery))
-	if err != nil {
-		if login, err = url.Parse(m.authRoot + loginPath); err != nil {
-			panic(err)
-		}
-	}
+	w.Header().Set("Location", login.String())
 
 	fmt.Fprintf(w, `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;URL='%s'" /></head><body></body></html>`, login.String())
+}
+
+func makeRedirect(path string, r *http.Request) *url.URL {
+	var (
+		u   *url.URL
+		err error
+	)
+	if u, err = url.Parse(path); err != nil {
+		return r.URL
+	}
+
+	v := u.Query()
+	v.Set(redirectParam, url.QueryEscape(r.URL.String()))
+	u.RawQuery = v.Encode()
+
+	return u
 }

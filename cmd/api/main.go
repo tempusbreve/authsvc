@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -94,7 +95,14 @@ func serve(ctx *cli.Context) error {
 		return err
 	}
 
-	l, err := authsvc.NewAuthenticationMiddleware("myrealm", authRoot, seeder)
+	config := authsvc.Config{
+		Realm:       ctx.String("realm"),
+		Seeder:      seeder,
+		PublicRoots: []string{path.Join(oauthRoot, "token")},
+		OAuth:       authsvc.NewOAuthHandler(),
+	}
+
+	l, err := authsvc.NewAuthenticationMiddleware(authRoot, config)
 	if err != nil {
 		return err
 	}
@@ -129,7 +137,7 @@ func serve(ctx *cli.Context) error {
 
 	a := n.With(negroni.Handler(l))
 	r.PathPrefix(apiRoot).Handler(a.With(negroni.Wrap(authsvc.RegisterAPI(apiRoot, verbose))))
-	r.PathPrefix(oauthRoot).Handler(a.With(negroni.Wrap(authsvc.RegisterOAuth(oauthRoot))))
+	r.PathPrefix(oauthRoot).Handler(a.With(negroni.Wrap(authsvc.RegisterOAuth(oauthRoot, config.OAuth))))
 
 	r.PathPrefix("/").Handler(n.With(negroni.WrapFunc(defaultHandlerFn)))
 
