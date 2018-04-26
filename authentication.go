@@ -205,7 +205,7 @@ func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.R
 	w.Header().Set("WWW-Authenticate", b.String())
 	w.Header().Set("Location", m.authRoot+loginPath)
 
-	login, err := url.Parse(m.authRoot + loginPath + "?return_url=" + url.PathEscape(r.URL.Path))
+	login, err := url.Parse(m.authRoot + loginPath + "?return_url=" + url.PathEscape(r.URL.Path+"?"+r.URL.RawQuery))
 	if err != nil {
 		if login, err = url.Parse(m.authRoot + loginPath); err != nil {
 			panic(err)
