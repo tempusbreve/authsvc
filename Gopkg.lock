@@ -29,12 +29,6 @@
   version = "v1.1.1"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/phyber/negroni-gzip"
-  packages = ["gzip"]
-  revision = "ef6356a5d02936b65ca8e60b604ed6b078aac8d3"
-
-[[projects]]
   name = "github.com/rs/cors"
   packages = ["."]
   revision = "feef513b9575b32f84bafa580aad89b011259019"
@@ -47,6 +41,12 @@
   revision = "a1cf62cc2159fff407728f118c41aece76c397fa"
 
 [[projects]]
+  name = "github.com/urfave/cli"
+  packages = ["."]
+  revision = "cfb38830724cc34fedffe9a2a29fb54fa9169cd1"
+  version = "v1.20.0"
+
+[[projects]]
   name = "github.com/urfave/negroni"
   packages = ["."]
   revision = "5dbbc83f748fc3ad38585842b0aedab546d0ea1e"
@@ -55,6 +55,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "86e1d4589cbe61d79b5869dfbd12f1c44c832e44ff93e3961ed54d1c8b1b037e"
+  inputs-digest = "ac1c0ea1d964451e5e506106203be064091ccb954a12704a458bdbad824e9ae2"
   solver-name = "gps-cdcl"
   solver-version = 1
