@@ -8,7 +8,8 @@ fi
 IMAGE=tempusbreve/authsvc
 NAME="${NAME:-authsvc}"
 PORT=${PORT:-4884}
-VERBOSE=${VERBOSE:-}
+
+
 
 SCRIPTDIR="$(cd "$(dirname "$0")"; pwd -P)"
 
@@ -23,8 +24,10 @@ function start-container {
   docker run -d \
       --name ${NAME} \
       --restart=always \
-      -e VERBOSE="${VERBOSE}" \
+      -e VERBOSE="${VERBOSE:-}" \
       -e PORT="${PORT}" \
+      -e SEED_HASH="${SEED_HASH:-}" \
+      -e SEED_BLOCK="${SEED_BLOCK:-}" \
       -p ${PORT}:${PORT} \
       -v "${DATA}":/data \
     ${IMAGE}
