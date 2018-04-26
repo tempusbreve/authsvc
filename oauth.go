@@ -69,7 +69,7 @@ func (h *oauth) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 func (h *oauth) handleApprove(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.checkCorrelation(r.Form.Get("corr"))
 	if !ok {
-		writeJSONCode(http.StatusForbidden, w, "")
+		writeJSONCode(http.StatusForbidden, w, "invalid correlation")
 		return
 	}
 	if r.Form.Get("approve") != "Approve" {
@@ -87,7 +87,7 @@ func (h *oauth) handleApprove(w http.ResponseWriter, r *http.Request) {
 func (h *oauth) handleToken(w http.ResponseWriter, r *http.Request) {
 	t, ok := h.checkToken(r.Form.Get("code"))
 	if !ok {
-		writeJSONCode(http.StatusForbidden, w, "")
+		writeJSONCode(http.StatusForbidden, w, "invalid token")
 		return
 	}
 
