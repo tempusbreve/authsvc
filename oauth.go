@@ -39,6 +39,7 @@ func RegisterOAuth(root string, h *OAuthHandler) http.Handler {
 	return mx
 }
 
+// NewOAuthHandler creates and initializes a new OAuthHandler
 func NewOAuthHandler() *OAuthHandler {
 	return &OAuthHandler{
 		cache:   map[string]*authorize{},
@@ -47,6 +48,7 @@ func NewOAuthHandler() *OAuthHandler {
 	}
 }
 
+// OAuthHandler provides OAuth2 capabilities.
 type OAuthHandler struct {
 	root    string
 	cache   map[string]*authorize
@@ -54,6 +56,8 @@ type OAuthHandler struct {
 	tokens  map[string]string
 }
 
+// Authorized returns the authorized scopes for a request, or an error
+// if the request does not have sufficient authorization.
 func (h *OAuthHandler) Authorized(r *http.Request) ([]string, error) {
 	auth := r.Header.Get("Authorization")
 	if auth != "" {

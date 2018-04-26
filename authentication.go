@@ -40,6 +40,7 @@ var (
 	}
 )
 
+// Config provides configuration options to the AuthenticationMiddleware.
 type Config struct {
 	Realm       string
 	Seeder      Seeder
@@ -82,10 +83,10 @@ func (m *AuthenticationMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	case nil:
 		n(w, r)
 	case ErrNoAuthToken:
-		m.unauthorized(w, r, nil)
+		m.unauthorized(w, r.URL, nil)
 	default:
 		m.clearLoginCookie(w)
-		m.unauthorized(w, r, err)
+		m.unauthorized(w, r.URL, err)
 	}
 }
 
@@ -204,7 +205,7 @@ func (m *AuthenticationMiddleware) authenticated(r *http.Request) error {
 	}
 }
 
-func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.Request, err error) {
+func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, orig *url.URL, err error) {
 	var b strings.Builder
 	_, _ = b.WriteString("authsvc")
 
@@ -231,7 +232,7 @@ func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.R
 		_, _ = b.WriteString(" " + strings.Join(parts, ", "))
 	}
 
-	login := makeRedirect(m.authRoot+loginPath, r)
+	login := makeRedirect(m.authRoot+loginPath, orig)
 	w.WriteHeader(code)
 	w.Header().Set("WWW-Authenticate", b.String())
 	w.Header().Set("Location", login.String())
@@ -239,17 +240,17 @@ func (m *AuthenticationMiddleware) unauthorized(w http.ResponseWriter, r *http.R
 	fmt.Fprintf(w, `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;URL='%s'" /></head><body></body></html>`, login.String())
 }
 
-func makeRedirect(path string, r *http.Request) *url.URL {
+func makeRedirect(path string, orig *url.URL) *url.URL {
 	var (
 		u   *url.URL
 		err error
 	)
 	if u, err = url.Parse(path); err != nil {
-		return r.URL
+		return orig
 	}
 
 	v := u.Query()
-	v.Set(redirectParam, url.QueryEscape(r.URL.String()))
+	v.Set(redirectParam, url.QueryEscape(orig.String()))
 	u.RawQuery = v.Encode()
 
 	return u
