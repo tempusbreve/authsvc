@@ -95,7 +95,11 @@ func (m *AuthenticationMiddleware) loginPOST(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		m.setLoginCookie(username, w)
-		writeRedirect(w, r, "/", map[string]string{"msg": "logged in"})
+		returnURL, err := url.PathUnescape(r.Form.Get("return_url"))
+		if err != nil {
+			returnURL = "/"
+		}
+		writeRedirect(w, r, returnURL, nil)
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
