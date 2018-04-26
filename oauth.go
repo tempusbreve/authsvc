@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/alecthomas/template"
@@ -15,12 +16,16 @@ import (
 
 // RegisterOAuth returns a router that handles OAuth routes.
 func RegisterOAuth(root string) http.Handler {
+	h := newOAuthHandler(root)
 	mx := mux.NewRouter()
-	mx.Handle(root, newOAuthHandler(root))
+	mx.Path(path.Join(root, "authorize")).HandlerFunc(h.handleAuthorize).Methods("GET")
+	mx.Path(path.Join(root, "approve")).HandlerFunc(h.handleApprove).Methods("GET")
+	mx.Path(path.Join(root, "token")).HandlerFunc(h.handleToken).Methods("POST")
+	mx.PathPrefix(root).HandlerFunc(h.handleDefault).Methods("GET")
 	return mx
 }
 
-func newOAuthHandler(root string) http.Handler {
+func newOAuthHandler(root string) *oauth {
 	return &oauth{
 		root:    root,
 		cache:   map[string]*authorize{},
@@ -34,24 +39,6 @@ type oauth struct {
 	cache   map[string]*authorize
 	clients map[string]string
 	tokens  map[string]string
-}
-
-func (h *oauth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		writeJSONCode(http.StatusBadRequest, w, err.Error())
-		return
-	}
-
-	switch p := r.URL.Path; p {
-	case h.root + "authorize":
-		h.handleAuthorize(w, r)
-	case h.root + "approve":
-		h.handleApprove(w, r)
-	case h.root + "token":
-		h.handleToken(w, r)
-	default:
-		h.handleDefault(w, r)
-	}
 }
 
 func (h *oauth) handleAuthorize(w http.ResponseWriter, r *http.Request) {
@@ -80,13 +67,6 @@ func (h *oauth) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *oauth) handleApprove(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-	default:
-		writeJSONCode(http.StatusMethodNotAllowed, w, r.Method)
-		return
-	}
-
 	a, ok := h.checkCorrelation(r.Form.Get("corr"))
 	if !ok {
 		writeJSONCode(http.StatusForbidden, w, "")
@@ -105,13 +85,6 @@ func (h *oauth) handleApprove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *oauth) handleToken(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "POST":
-	default:
-		writeJSONCode(http.StatusMethodNotAllowed, w, r.Method)
-		return
-	}
-
 	t, ok := h.checkToken(r.Form.Get("code"))
 	if !ok {
 		writeJSONCode(http.StatusForbidden, w, "")

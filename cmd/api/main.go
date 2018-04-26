@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/phyber/negroni-gzip/gzip"
 	"github.com/rs/cors"
 	"github.com/unrolled/secure"
 	"github.com/urfave/cli"
@@ -121,7 +120,6 @@ func serve(ctx *cli.Context) error {
 		authsvc.NewDebugMiddleware(os.Stderr, verbose),
 		negroni.HandlerFunc(sec.HandlerFuncWithNext),
 		negroni.HandlerFunc(c.ServeHTTP),
-		negroni.Handler(gzip.Gzip(gzip.DefaultCompression)),
 		negroni.NewStatic(http.Dir(ctx.String("public"))),
 	)
 
@@ -133,7 +131,7 @@ func serve(ctx *cli.Context) error {
 	r.PathPrefix(apiRoot).Handler(a.With(negroni.Wrap(authsvc.RegisterAPI(apiRoot, verbose))))
 	r.PathPrefix(oauthRoot).Handler(a.With(negroni.Wrap(authsvc.RegisterOAuth(oauthRoot))))
 
-	r.PathPrefix("/").Handler(n)
+	r.PathPrefix("/").Handler(n.With(negroni.WrapFunc(defaultHandlerFn)))
 
 	s := &http.Server{
 		Addr:           listen,
@@ -145,4 +143,8 @@ func serve(ctx *cli.Context) error {
 
 	log.Printf("listening on %s\n", listen)
 	return s.ListenAndServe()
+}
+
+func defaultHandlerFn(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, " THE END ")
 }
