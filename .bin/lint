@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -e
+
+#
+# Put ourselves at the known project root location, and go back where
+# we were on exit.
+#
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+function _trap_exit() {
+  popd &> /dev/null
+}
+trap _trap_exit EXIT
+pushd "${PROJECT_ROOT}" &> /dev/null
+
+echo "Lint"
+
+gometalinter --vendor ./...
+
+echo "Done"

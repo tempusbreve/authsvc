@@ -34,11 +34,10 @@ const (
 
 // Options encapsulates OAuth Handler options.
 type Options struct {
-	TokenTTL     time.Duration
-	GrantTTL     time.Duration
-	Cache        store.Cache
-	ClientTokens store.Cache
-	TokenClients store.Cache
+	TokenTTL   time.Duration
+	GrantTTL   time.Duration
+	Cache      store.Cache
+	TokenCache *TokenCache
 }
 
 // RegisterAPI returns a router that handles OAuth routes.
@@ -65,11 +64,8 @@ func NewHandler(options *Options) *Handler {
 	if options.Cache == nil {
 		options.Cache = store.NewMemoryCache()
 	}
-	if options.ClientTokens == nil {
-		options.ClientTokens = store.NewMemoryCache()
-	}
-	if options.TokenClients == nil {
-		options.TokenClients = store.NewMemoryCache()
+	if options.TokenCache == nil {
+		options.TokenCache = NewTokenCache(store.NewMemoryCache(), store.NewMemoryCache())
 	}
 	return &Handler{opts: options}
 }
@@ -95,18 +91,9 @@ func (h *Handler) Authorized(r *http.Request) ([]string, error) {
 }
 
 func (h *Handler) validToken(token string) bool {
-	if v, err := h.opts.TokenClients.Get(token); err == nil {
-		if id, ok := v.(string); ok {
-			if vv, err := h.opts.ClientTokens.Get(id); err == nil {
-				if t, ok := vv.(string); ok {
-					if t == token {
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
+	// TODO: validate client id here (locked out, etc.)
+	_, err := h.opts.TokenCache.Get(token)
+	return err == nil
 }
 
 func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
@@ -215,10 +202,7 @@ func (h *Handler) handleDefault(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) addClient(tok string, id string) {
 	expire := time.Now().Add(h.opts.GrantTTL)
-	if err := h.opts.ClientTokens.PutUntil(expire, id, tok); err != nil {
-		panic(err)
-	}
-	if err := h.opts.TokenClients.PutUntil(expire, tok, id); err != nil {
+	if err := h.opts.TokenCache.PutUntil(expire, id, tok); err != nil {
 		panic(err)
 	}
 }
