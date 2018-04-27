@@ -102,7 +102,7 @@ func serve(ctx *cli.Context) error {
 		Realm:       ctx.String("realm"),
 		Seeder:      seeder,
 		PublicRoots: []string{path.Join(oauthRoot, "token")},
-		OAuth:       oauth.NewHandler(),
+		OAuth:       oauth.NewHandler(nil),
 	}
 
 	l, err := authentication.NewMiddleware(authRoot, opts)

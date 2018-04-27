@@ -60,7 +60,7 @@ func NewMiddleware(root string, config Options) (*Middleware, error) {
 		}
 	}
 	if config.OAuth == nil {
-		config.OAuth = oauth.NewHandler()
+		config.OAuth = oauth.NewHandler(nil)
 	}
 	return &Middleware{
 		authRoot: root,

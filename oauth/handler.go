@@ -32,6 +32,15 @@ const (
 	ScopeAll = "all"
 )
 
+// Options encapsulates OAuth Handler options.
+type Options struct {
+	TokenTTL     time.Duration
+	GrantTTL     time.Duration
+	Cache        store.Cache
+	ClientTokens store.Cache
+	TokenClients store.Cache
+}
+
 // RegisterAPI returns a router that handles OAuth routes.
 func (h *Handler) RegisterAPI(root string) http.Handler {
 	mx := mux.NewRouter()
@@ -43,19 +52,31 @@ func (h *Handler) RegisterAPI(root string) http.Handler {
 }
 
 // NewHandler creates and initializes a new OAuthHandler
-func NewHandler() *Handler {
-	return &Handler{
-		cache:   store.NewMemoryCache(),
-		clients: map[string]string{},
-		tokens:  map[string]string{},
+func NewHandler(options *Options) *Handler {
+	if options == nil {
+		options = &Options{}
 	}
+	if options.TokenTTL == 0 {
+		options.TokenTTL = 15 * time.Minute
+	}
+	if options.GrantTTL == 0 {
+		options.GrantTTL = 14 * 24 * time.Hour
+	}
+	if options.Cache == nil {
+		options.Cache = store.NewMemoryCache()
+	}
+	if options.ClientTokens == nil {
+		options.ClientTokens = store.NewMemoryCache()
+	}
+	if options.TokenClients == nil {
+		options.TokenClients = store.NewMemoryCache()
+	}
+	return &Handler{opts: options}
 }
 
 // Handler provides OAuth2 capabilities.
 type Handler struct {
-	cache   store.Cache
-	clients map[string]string
-	tokens  map[string]string
+	opts *Options
 }
 
 // Authorized returns the authorized scopes for a request, or an error
@@ -74,9 +95,15 @@ func (h *Handler) Authorized(r *http.Request) ([]string, error) {
 }
 
 func (h *Handler) validToken(token string) bool {
-	if id, ok := h.tokens[token]; ok {
-		if tok, ok := h.clients[id]; ok && tok == token {
-			return true
+	if v, err := h.opts.TokenClients.Get(token); err == nil {
+		if id, ok := v.(string); ok {
+			if vv, err := h.opts.ClientTokens.Get(id); err == nil {
+				if t, ok := vv.(string); ok {
+					if t == token {
+						return true
+					}
+				}
+			}
 		}
 	}
 	return false
@@ -157,7 +184,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 			common.JSONStatusResponse(http.StatusForbidden, w, "mismatching client ids")
 			return
 		}
-		switch err := h.cache.Delete(t.ID); err {
+		switch err := h.opts.Cache.Delete(t.ID); err {
 		case nil, store.ErrNotFound:
 		default:
 			panic(err)
@@ -187,20 +214,26 @@ func (h *Handler) handleDefault(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) addClient(tok string, id string) {
-	h.clients[id] = tok
-	h.tokens[tok] = id
+	expire := time.Now().Add(h.opts.GrantTTL)
+	if err := h.opts.ClientTokens.PutUntil(expire, id, tok); err != nil {
+		panic(err)
+	}
+	if err := h.opts.TokenClients.PutUntil(expire, tok, id); err != nil {
+		panic(err)
+	}
 }
 
 func (h *Handler) addToCache(a *authorize) string {
 	a.ID = generateRandomString()
-	if err := h.cache.PutUntil(time.Now().Add(10*time.Minute), a.ID, a); err != nil {
+	expire := time.Now().Add(h.opts.TokenTTL)
+	if err := h.opts.Cache.PutUntil(expire, a.ID, a); err != nil {
 		panic(err)
 	}
 	return a.ID
 }
 
 func (h *Handler) checkToken(tok string) (*authorize, bool) {
-	if v, err := h.cache.Get(tok); err == nil {
+	if v, err := h.opts.Cache.Get(tok); err == nil {
 		a, ok := v.(*authorize)
 		return a, ok
 	}
