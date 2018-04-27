@@ -4,17 +4,18 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/template"
 	"github.com/gorilla/mux"
 
 	"breve.us/authsvc/common"
+	"breve.us/authsvc/store"
 )
 
 // Error Values
@@ -44,7 +45,7 @@ func (h *Handler) RegisterAPI(root string) http.Handler {
 // NewHandler creates and initializes a new OAuthHandler
 func NewHandler() *Handler {
 	return &Handler{
-		cache:   map[string]*authorize{},
+		cache:   store.NewMemoryCache(),
 		clients: map[string]string{},
 		tokens:  map[string]string{},
 	}
@@ -52,7 +53,7 @@ func NewHandler() *Handler {
 
 // Handler provides OAuth2 capabilities.
 type Handler struct {
-	cache   map[string]*authorize
+	cache   store.Cache
 	clients map[string]string
 	tokens  map[string]string
 }
@@ -156,7 +157,11 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 			common.JSONStatusResponse(http.StatusForbidden, w, "mismatching client ids")
 			return
 		}
-		h.removeFromCache(t.ID)
+		switch err := h.cache.Delete(t.ID); err {
+		case nil, store.ErrNotFound:
+		default:
+			panic(err)
+		}
 		tok := generateRandomString()
 		h.addClient(tok, creds.ID)
 		common.JSONResponse(w, &bearer{Token: tok, Type: "Bearer"})
@@ -187,21 +192,19 @@ func (h *Handler) addClient(tok string, id string) {
 }
 
 func (h *Handler) addToCache(a *authorize) string {
-	if a.ID != "" {
-		h.removeFromCache(a.ID)
-		a.ID = ""
-	}
 	a.ID = generateRandomString()
-	h.cache[a.ID] = a
+	if err := h.cache.PutUntil(time.Now().Add(10*time.Minute), a.ID, a); err != nil {
+		panic(err)
+	}
 	return a.ID
 }
 
-func (h *Handler) removeFromCache(id string) { delete(h.cache, id) }
-
 func (h *Handler) checkToken(tok string) (*authorize, bool) {
-	t, ok := h.cache[tok]
-	log.Printf("checking token %q; got %v/%t", tok, t, ok)
-	return t, ok
+	if v, err := h.cache.Get(tok); err == nil {
+		a, ok := v.(*authorize)
+		return a, ok
+	}
+	return nil, false
 }
 
 func (h *Handler) checkCorrelation(corr string) (*authorize, bool) {
