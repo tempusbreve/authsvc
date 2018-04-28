@@ -52,8 +52,11 @@ type Options struct {
 }
 
 // NewMiddleware returns a middlware suitable for authentication.
-func NewMiddleware(root string, config Options) (*Middleware, error) {
+func NewMiddleware(root string, config *Options) (*Middleware, error) {
 	var err error
+	if config == nil {
+		config = &Options{}
+	}
 	if config.Seeder == nil {
 		if config.Seeder, err = common.NewDefaultSeeder(); err != nil {
 			return nil, err
@@ -72,7 +75,7 @@ func NewMiddleware(root string, config Options) (*Middleware, error) {
 // Middleware enforces authentication on protected routes.
 type Middleware struct {
 	authRoot string
-	config   Options
+	config   *Options
 	cookie   *securecookie.SecureCookie
 }
 

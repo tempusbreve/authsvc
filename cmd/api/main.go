@@ -17,6 +17,7 @@ import (
 	"breve.us/authsvc/authentication"
 	"breve.us/authsvc/common"
 	"breve.us/authsvc/oauth"
+	"breve.us/authsvc/store"
 	"breve.us/authsvc/user"
 )
 
@@ -42,6 +43,12 @@ var (
 		Usage:  "path to public folder",
 		EnvVar: "PUBLIC_HOME",
 		Value:  "public",
+	}
+	dataFlag = cli.StringFlag{
+		Name:   "data",
+		Usage:  "path to data folder",
+		EnvVar: "DATA_HOME",
+		Value:  "data",
 	}
 	realmFlag = cli.StringFlag{
 		Name:   "realm",
@@ -80,6 +87,7 @@ func main() {
 			portFlag,
 			verboseFlag,
 			publicFlag,
+			dataFlag,
 			realmFlag,
 			seedHashFlag,
 			seedBlockFlag,
@@ -93,19 +101,40 @@ func main() {
 func serve(ctx *cli.Context) error {
 	listen := fmt.Sprintf(":%d", ctx.Int("port"))
 	verbose := ctx.Bool("verbose")
+	data := ctx.String("data")
+
+	cache, err := store.NewBoltDBCache(path.Join(data, "cache.db"))
+	if err != nil {
+		return err
+	}
+	ct, err := store.NewBoltDBCache(path.Join(data, "clienttokens.db"))
+	if err != nil {
+		return err
+	}
+	tc, err := store.NewBoltDBCache(path.Join(data, "tokenclients.db"))
+	if err != nil {
+		return err
+	}
+
+	oauthOpts := &oauth.Options{
+		Cache:      cache,
+		TokenCache: oauth.NewTokenCache(ct, tc),
+	}
+	oauthHandler := oauth.NewHandler(oauthOpts)
+
 	seeder, err := common.NewSeeder(ctx.String("seedhash"), ctx.String("seedblock"))
 	if err != nil {
 		return err
 	}
 
-	opts := authentication.Options{
+	authOpts := &authentication.Options{
 		Realm:       ctx.String("realm"),
 		Seeder:      seeder,
 		PublicRoots: []string{path.Join(oauthRoot, "token")},
-		OAuth:       oauth.NewHandler(nil),
+		OAuth:       oauthHandler,
 	}
 
-	l, err := authentication.NewMiddleware(authRoot, opts)
+	l, err := authentication.NewMiddleware(authRoot, authOpts)
 	if err != nil {
 		return err
 	}
@@ -140,7 +169,7 @@ func serve(ctx *cli.Context) error {
 
 	a := n.With(negroni.Handler(l))
 	r.PathPrefix(userRoot).Handler(a.With(negroni.Wrap(user.RegisterAPI(userRoot, verbose))))
-	r.PathPrefix(oauthRoot).Handler(a.With(negroni.Wrap(opts.OAuth.RegisterAPI(oauthRoot))))
+	r.PathPrefix(oauthRoot).Handler(a.With(negroni.Wrap(oauthHandler.RegisterAPI(oauthRoot))))
 
 	r.PathPrefix("/").Handler(n.With(negroni.WrapFunc(defaultHandlerFn)))
 
