@@ -11,6 +11,12 @@
   revision = "a0175ee3bccc567396460bf5acd36800cb10c49c"
 
 [[projects]]
+  name = "github.com/boltdb/bolt"
+  packages = ["."]
+  revision = "2f1ce7a837dcb8da3ec595b1dac9d0632f0f99e8"
+  version = "v1.3.1"
+
+[[projects]]
   name = "github.com/gorilla/context"
   packages = ["."]
   revision = "1ea25387ff6f684839d82767c1733ff4d4d15d0a"
@@ -52,9 +58,15 @@
   revision = "5dbbc83f748fc3ad38585842b0aedab546d0ea1e"
   version = "v0.3.0"
 
+[[projects]]
+  branch = "master"
+  name = "golang.org/x/sys"
+  packages = ["unix"]
+  revision = "cbbc999da32df943dac6cd71eb3ee39e1d7838b9"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ac1c0ea1d964451e5e506106203be064091ccb954a12704a458bdbad824e9ae2"
+  inputs-digest = "47cc44988b966c2a04c8e9863e38693c69421e0762400e8c0f61d285b3abbaef"
   solver-name = "gps-cdcl"
   solver-version = 1
