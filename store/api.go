@@ -20,3 +20,9 @@ type Cache interface {
 	Get(key string) (interface{}, error)
 	Delete(key string) error
 }
+
+type cacheValue struct {
+	Key    string
+	Expire time.Time
+	Value  interface{}
+}

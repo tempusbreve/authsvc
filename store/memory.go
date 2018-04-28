@@ -4,27 +4,21 @@ import "time"
 
 // NewMemoryCache implementes Cache with an in-memory store
 func NewMemoryCache() Cache {
-	return &memory{data: map[string]*val{}}
+	return &memory{data: map[string]*cacheValue{}}
 }
 
 type clockFn func() time.Time
 
-type val struct {
-	key    string
-	expire time.Time
-	value  interface{}
-}
-
 type memory struct {
 	now  clockFn
-	data map[string]*val
+	data map[string]*cacheValue
 }
 
 func (m *memory) Put(key string, value interface{}) error {
 	if m == nil || m.data == nil {
 		return ErrInternal
 	}
-	m.data[key] = &val{key: key, value: value}
+	m.data[key] = &cacheValue{Key: key, Value: value}
 	return nil
 }
 
@@ -32,7 +26,7 @@ func (m *memory) PutUntil(expire time.Time, key string, value interface{}) error
 	if m == nil || m.data == nil {
 		return ErrInternal
 	}
-	m.data[key] = &val{key: key, expire: expire, value: value}
+	m.data[key] = &cacheValue{Key: key, Expire: expire, Value: value}
 	return nil
 }
 
@@ -47,11 +41,11 @@ func (m *memory) Get(key string) (interface{}, error) {
 	if m.now == nil {
 		m.now = time.Now
 	}
-	if !v.expire.IsZero() && v.expire.Before(m.now()) {
+	if !v.Expire.IsZero() && v.Expire.Before(m.now()) {
 		delete(m.data, key)
-		return v.value, ErrExpired
+		return v.Value, ErrExpired
 	}
-	return v.value, nil
+	return v.Value, nil
 }
 
 func (m *memory) Delete(key string) error {
