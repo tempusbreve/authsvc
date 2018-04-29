@@ -49,6 +49,7 @@ type Options struct {
 	Seeder      common.Seeder
 	PublicRoots []string
 	OAuth       *oauth.Handler
+	Insecure    bool
 }
 
 // NewMiddleware returns a middlware suitable for authentication.
@@ -152,7 +153,7 @@ func (m *Middleware) setLoginCookie(username string, w http.ResponseWriter) {
 			Path:     "/",
 			Expires:  time.Now().Add(time.Duration(loginLifetime) * time.Second),
 			MaxAge:   loginLifetime,
-			Secure:   true,
+			Secure:   !m.config.Insecure,
 			HttpOnly: true,
 		})
 	default:

@@ -74,6 +74,11 @@ var (
 		EnvVar: "CORS_ORIGINS",
 		Value:  &cli.StringSlice{"*"},
 	}
+	insecureFlag = cli.BoolFlag{
+		Name:   "insecure",
+		Usage:  "don't use secure cookie",
+		EnvVar: "INSECURE",
+	}
 )
 
 func main() {
@@ -132,6 +137,7 @@ func serve(ctx *cli.Context) error {
 		Seeder:      seeder,
 		PublicRoots: []string{path.Join(oauthRoot, "token")},
 		OAuth:       oauthHandler,
+		Insecure:    ctx.Bool("insecure"),
 	}
 
 	l, err := authentication.NewMiddleware(authRoot, authOpts)
