@@ -3,6 +3,7 @@ package common // import "breve.us/authsvc/common"
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 )
@@ -36,7 +37,9 @@ func JSONResponse(w http.ResponseWriter, o interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(o); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, `{"error": "%v"}`, err)
+		if _, e2 := fmt.Fprintf(w, `{"error": "%v"}`, err); e2 != nil {
+			log.Printf("error writing error code to response: %v", e2)
+		}
 	}
 }
 
@@ -48,7 +51,9 @@ func JSONStatusResponse(code int, w http.ResponseWriter, o interface{}) {
 	if o != nil {
 		if err := json.NewEncoder(w).Encode(o); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, `{"error": "%v"}`, err)
+			if _, e2 := fmt.Fprintf(w, `{"error": "%v"}`, err); e2 != nil {
+				log.Printf("error writing error code to response: %v", e2)
+			}
 		}
 	}
 }

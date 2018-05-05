@@ -96,7 +96,8 @@ func main() {
 			realmFlag,
 			seedHashFlag,
 			seedBlockFlag,
-			corsOriginsFlag}}}
+			corsOriginsFlag,
+			insecureFlag}}}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)

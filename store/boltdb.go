@@ -13,7 +13,7 @@ func NewBoltDBCache(path string) (Cache, error) {
 	cache := &bcache{path: path}
 	switch db, err := cache.open(); err {
 	case nil:
-		defer db.Close()
+		_ = db.Close()
 		return cache, nil
 	default:
 		return nil, err
@@ -77,7 +77,7 @@ func (m *bcache) put(key string, v *cacheValue) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err = enc.Encode(v); err != nil {
@@ -91,7 +91,7 @@ func (m *bcache) get(key string) (*cacheValue, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	v := &cacheValue{}
 	if err = db.View(func(tx *bolt.Tx) error {
 		data := tx.Bucket([]byte(defaultBucket)).Get([]byte(key))
@@ -112,7 +112,7 @@ func (m *bcache) remove(key string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	return db.Update(deleteKey(defaultBucket, key))
 }
 
@@ -122,7 +122,7 @@ func (m *bcache) open() (*bolt.DB, error) {
 		if err = db.Update(createBucket(defaultBucket)); err == nil {
 			return db, nil
 		}
-		defer db.Close()
+		defer func() { _ = db.Close() }()
 	}
 	return nil, err
 }
