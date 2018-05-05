@@ -2,8 +2,10 @@ package oauth // import "breve.us/authsvc/oauth"
 
 import (
 	"encoding/base64"
+	"encoding/gob"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -17,6 +19,11 @@ import (
 	"breve.us/authsvc/common"
 	"breve.us/authsvc/store"
 )
+
+func init() {
+	rand.Seed(time.Now().Unix())
+	gob.Register(&authorize{})
+}
 
 // Error Values
 var (
@@ -125,7 +132,7 @@ func (h *Handler) handleApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a, ok := h.checkCorrelation(r.Form.Get("corr"))
+	a, ok := h.checkCode(r.Form.Get("corr"))
 	if !ok {
 		common.JSONStatusResponse(http.StatusForbidden, w, "invalid correlation")
 		return
@@ -148,7 +155,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, ok := h.checkToken(r.Form.Get("code"))
+	t, ok := h.checkCode(r.Form.Get("code"))
 	if !ok {
 		common.JSONStatusResponse(http.StatusForbidden, w, "invalid token")
 		return
@@ -208,7 +215,9 @@ func (h *Handler) addClient(tok string, id string) {
 }
 
 func (h *Handler) addToCache(a *authorize) string {
-	a.ID = generateRandomString()
+	if a.ID == "" {
+		a.ID = generateRandomString()
+	}
 	expire := time.Now().Add(h.opts.TokenTTL)
 	if err := h.opts.Cache.PutUntil(expire, a.ID, a); err != nil {
 		panic(err)
@@ -216,17 +225,15 @@ func (h *Handler) addToCache(a *authorize) string {
 	return a.ID
 }
 
-func (h *Handler) checkToken(tok string) (*authorize, bool) {
-	if v, err := h.opts.Cache.Get(tok); err == nil {
+func (h *Handler) checkCode(code string) (*authorize, bool) {
+	switch v, err := h.opts.Cache.Get(code); err {
+	case nil:
 		a, ok := v.(*authorize)
 		return a, ok
+	default:
+		log.Printf("error checkCode(%q): %v", code, err)
+		return nil, false
 	}
-	return nil, false
-}
-
-func (h *Handler) checkCorrelation(corr string) (*authorize, bool) {
-	// TODO: more validation?
-	return h.checkToken(corr)
 }
 
 func (h *Handler) checkRedirect(a *authorize) bool {

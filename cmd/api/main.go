@@ -44,6 +44,12 @@ var (
 		EnvVar: "PUBLIC_HOME",
 		Value:  "public",
 	}
+	storageFlag = cli.StringFlag{
+		Name:   "storage",
+		Usage:  "storage engine [memory or boltdb]",
+		EnvVar: "STORAGE_ENGINE",
+		Value:  "boltdb",
+	}
 	dataFlag = cli.StringFlag{
 		Name:   "data",
 		Usage:  "path to data folder",
@@ -92,6 +98,7 @@ func main() {
 			portFlag,
 			verboseFlag,
 			publicFlag,
+			storageFlag,
 			dataFlag,
 			realmFlag,
 			seedHashFlag,
@@ -107,26 +114,12 @@ func main() {
 func serve(ctx *cli.Context) error {
 	listen := fmt.Sprintf(":%d", ctx.Int("port"))
 	verbose := ctx.Bool("verbose")
-	data := ctx.String("data")
 
-	cache, err := store.NewBoltDBCache(path.Join(data, "cache.db"))
+	opts, err := buildOAuthOptions(ctx)
 	if err != nil {
 		return err
 	}
-	ct, err := store.NewBoltDBCache(path.Join(data, "clienttokens.db"))
-	if err != nil {
-		return err
-	}
-	tc, err := store.NewBoltDBCache(path.Join(data, "tokenclients.db"))
-	if err != nil {
-		return err
-	}
-
-	oauthOpts := &oauth.Options{
-		Cache:      cache,
-		TokenCache: oauth.NewTokenCache(ct, tc),
-	}
-	oauthHandler := oauth.NewHandler(oauthOpts)
+	oauthHandler := oauth.NewHandler(opts)
 
 	seeder, err := common.NewSeeder(ctx.String("seedhash"), ctx.String("seedblock"))
 	if err != nil {
@@ -194,5 +187,34 @@ func serve(ctx *cli.Context) error {
 }
 
 func defaultHandlerFn(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, " THE END ")
+	if _, err := fmt.Fprintf(w, "no handler"); err != nil {
+		log.Printf("error writing response: %v", err)
+	}
+}
+
+func buildOAuthOptions(ctx *cli.Context) (*oauth.Options, error) {
+	var (
+		cache store.Cache
+		tok   *oauth.TokenCache
+		err   error
+	)
+	switch ctx.String("storage") {
+	case "boltdb":
+		data := ctx.String("data")
+		if cache, err = store.NewBoltDBCache(path.Join(data, "cache.db")); err != nil {
+			return nil, err
+		}
+		var ct, tc store.Cache
+		if ct, err = store.NewBoltDBCache(path.Join(data, "clienttokens.db")); err != nil {
+			return nil, err
+		}
+		if tc, err = store.NewBoltDBCache(path.Join(data, "tokenclients.db")); err != nil {
+			return nil, err
+		}
+		tok = oauth.NewTokenCache(ct, tc)
+	default:
+		cache = store.NewMemoryCache()
+		tok = oauth.NewTokenCache(store.NewMemoryCache(), store.NewMemoryCache())
+	}
+	return &oauth.Options{Cache: cache, TokenCache: tok}, nil
 }

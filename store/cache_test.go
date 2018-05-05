@@ -1,11 +1,16 @@
 package store
 
 import (
+	"encoding/gob"
 	"io/ioutil"
 	"reflect"
 	"testing"
 	"time"
 )
+
+func init() {
+	gob.Register(&tt{})
+}
 
 var (
 	past    = func() time.Time { return time.Date(2008, time.January, 3, 14, 59, 59, 0, time.UTC) }
@@ -45,6 +50,7 @@ func testCache(fn factory, t *testing.T) {
 		"two":   {key: "key", vv: 42},
 		"three": {key: "key", vv: false, expire: past(), experr: ErrExpired},
 		"four":  {key: "key", vv: time.Now().UTC().Round(0), expire: future()},
+		"five":  {key: "key", vv: &tt{KeyOne: "hi"}},
 	}
 
 	testFunctions := []testFn{
@@ -80,6 +86,11 @@ type testCase struct {
 	puterr error
 	geterr error
 	experr error
+}
+
+type tt struct {
+	KeyOne string
+	KeyTwo string
 }
 
 func testPut(name string, cache Cache, tc testCase, t *testing.T) {

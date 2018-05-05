@@ -17,6 +17,10 @@ build: ## Build binary
 	@echo "build artifacts"
 	@.bin/build
 
+run: build ## Run API locally
+	@echo "run api"
+	@.bin/run
+
 format: ## Format Go code
 	@echo "format code"
 	@.bin/format

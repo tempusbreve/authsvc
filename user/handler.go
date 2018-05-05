@@ -2,6 +2,7 @@ package user // import "breve.us/authsvc/user"
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -13,6 +14,9 @@ func RegisterAPI(root string, verbose bool) http.Handler {
 	a := &handler{root: root}
 	mx := mux.NewRouter()
 	mx.Path(root).HandlerFunc(a.handleUser).Methods("GET")
+	if !strings.HasSuffix(root, "/") {
+		mx.Path(root + "/").HandlerFunc(a.handleUser).Methods("GET")
+	}
 	return mx
 }
 
