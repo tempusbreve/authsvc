@@ -100,7 +100,7 @@ func main() {
 			insecureFlag}}}
 
 	if err := app.Run(os.Args); err != nil {
-		log.Fatal(err)
+		log.Fatalf("ERROR: %v", err)
 	}
 }
 
@@ -188,6 +188,7 @@ func serve(ctx *cli.Context) error {
 		MaxHeaderBytes: 1 << 16,
 	}
 
+	log.Printf("%v version %v", ctx.App.Name, ctx.App.Version)
 	log.Printf("listening on %s\n", listen)
 	return s.ListenAndServe()
 }
