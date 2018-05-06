@@ -1,6 +1,9 @@
 package store
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // NewMemoryCache implementes Cache with an in-memory store
 func NewMemoryCache() Cache {
@@ -58,4 +61,15 @@ func (m *memory) Delete(key string) error {
 	}
 	delete(m.data, key)
 	return nil
+}
+
+func (m *memory) Keys() []string {
+	var keys []string
+	if m != nil {
+		for k := range m.data {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }

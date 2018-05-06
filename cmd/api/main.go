@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -56,6 +57,12 @@ var (
 		EnvVar: "DATA_HOME",
 		Value:  "data",
 	}
+	clientsFlag = cli.StringFlag{
+		Name:   "clients",
+		Usage:  "path to JSON-encoded registered OAuth2 clients",
+		EnvVar: "CLIENTS",
+		Value:  "",
+	}
 	realmFlag = cli.StringFlag{
 		Name:   "realm",
 		Usage:  "authentication realm",
@@ -100,6 +107,7 @@ func main() {
 			publicFlag,
 			storageFlag,
 			dataFlag,
+			clientsFlag,
 			realmFlag,
 			seedHashFlag,
 			seedBlockFlag,
@@ -194,27 +202,52 @@ func defaultHandlerFn(w http.ResponseWriter, r *http.Request) {
 
 func buildOAuthOptions(ctx *cli.Context) (*oauth.Options, error) {
 	var (
-		cache store.Cache
-		tok   *oauth.TokenCache
-		err   error
+		cache, ct, tc, cr store.Cache
+		tok               *oauth.TokenCache
+		clients           *oauth.ClientRegistry
+		err               error
 	)
+
+	// TODO: some of this should be in the oauth package
+
 	switch ctx.String("storage") {
 	case "boltdb":
 		data := ctx.String("data")
 		if cache, err = store.NewBoltDBCache(path.Join(data, "cache.db")); err != nil {
 			return nil, err
 		}
-		var ct, tc store.Cache
 		if ct, err = store.NewBoltDBCache(path.Join(data, "clienttokens.db")); err != nil {
 			return nil, err
 		}
 		if tc, err = store.NewBoltDBCache(path.Join(data, "tokenclients.db")); err != nil {
 			return nil, err
 		}
-		tok = oauth.NewTokenCache(ct, tc)
+		if cr, err = store.NewBoltDBCache(path.Join(data, "clientregistry.db")); err != nil {
+			return nil, err
+		}
 	default:
 		cache = store.NewMemoryCache()
-		tok = oauth.NewTokenCache(store.NewMemoryCache(), store.NewMemoryCache())
+		ct = store.NewMemoryCache()
+		tc = store.NewMemoryCache()
+		cr = store.NewMemoryCache()
 	}
-	return &oauth.Options{Cache: cache, TokenCache: tok}, nil
+
+	tok = oauth.NewTokenCache(ct, tc)
+	clients = oauth.NewClientRegistry(cr)
+
+	if clientsFile := ctx.String("clients"); clientsFile != "" {
+		var rdr io.ReadCloser
+		if rdr, err = os.Open(clientsFile); err == nil {
+			err = clients.LoadFromJSON(rdr)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &oauth.Options{
+		Cache:      cache,
+		TokenCache: tok,
+		Clients:    clients,
+	}, nil
 }

@@ -24,6 +24,7 @@ To run locally, use the `make run` command.
 You can override default parameters in a file called `.local.config`.
 For example you could use:
 
+```sh
   #!/usr/bin/env bash
 
   export PORT=${PORT:-4884}
@@ -34,4 +35,21 @@ For example you could use:
   export SEED_BLOCK="${SEED_BLOCK:-yTVbPPsuijznJ0G05+EgXpoBTuT64FwpHS/X2CThfow=}"
   export SEED_HASH="${SEED_HASH:-uB0qbJMdJZn2E0jdjC8gPnaxEa/tNLDKMtzb956BzaAg8XlqEsPLCNGi0jhTsa/TDwIYQxQIm8CyEcnU9E4bWw==}"
   export STORAGE_ENGINE="${STORAGE_ENGINE:-boltdb}"
+  export CLIENTS="${CLIENTS:-.local/clients.json}"
+```
 
+You can define your registered OAuth2 clients in the file named with the `--clients` parameter or the envirionment variable `CLIENTS`:
+
+```json
+  [
+    {
+      "id": "mattermost-client",
+      "name": "Mattermost",
+      "endpoints": [
+        "https://mattermost.example.com/signup/gitlab/complete"
+      ]
+    }
+  ]
+```
+
+Where the `id` is the OAuth2 Client ID, and the `endpoints` are the acceptable redirect endpoints after being authorized.

@@ -3,6 +3,8 @@ package store
 import (
 	"bytes"
 	"encoding/gob"
+	"log"
+	"sort"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -70,6 +72,27 @@ func (m *bcache) Delete(key string) error {
 		return ErrInternal
 	}
 	return m.remove(key)
+}
+
+func (m *bcache) Keys() []string {
+	var keys []string
+
+	db, err := m.open()
+	if err != nil {
+		return keys
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket([]byte(defaultBucket)).ForEach(func(k, v []byte) error {
+			keys = append(keys, string(k))
+			return nil
+		})
+	}); err != nil {
+		log.Printf("error iterating keys: %v", err)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (m *bcache) put(key string, v *cacheValue) error {

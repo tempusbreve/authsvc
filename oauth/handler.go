@@ -45,6 +45,7 @@ type Options struct {
 	GrantTTL   time.Duration
 	Cache      store.Cache
 	TokenCache *TokenCache
+	Clients    *ClientRegistry
 }
 
 // RegisterAPI returns a router that handles OAuth routes.
@@ -98,8 +99,8 @@ func (h *Handler) Authorized(r *http.Request) ([]string, error) {
 }
 
 func (h *Handler) validToken(token string) bool {
-	// TODO: validate client id here (locked out, etc.)
 	_, err := h.opts.TokenCache.Get(token)
+	// TODO: validate client id here (locked out, etc.)
 	return err == nil
 }
 
@@ -114,14 +115,15 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		common.JSONStatusResponse(http.StatusForbidden, w, err.Error())
 		return
 	}
-	if !h.checkClient(a.ClientID) {
+	if !h.opts.Clients.VerifyClient(a.ClientID) {
 		common.JSONStatusResponse(http.StatusForbidden, w, "invalid client id")
 		return
 	}
-	if !h.checkRedirect(a) {
-		common.JSONStatusResponse(http.StatusForbidden, w, "invalid redirect uri")
+	if !h.opts.Clients.VerifyRedirect(a.ClientID, a.RedirectURI) {
+		common.JSONStatusResponse(http.StatusForbidden, w, "invalid client redirect")
 		return
 	}
+
 	h.addToCache(a)
 	a.serveForm(w)
 }
@@ -167,8 +169,8 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.checkClient(creds.ID) {
-		common.JSONStatusResponse(http.StatusForbidden, w, err.Error())
+	if !h.opts.Clients.VerifyClient(creds.ID) {
+		common.JSONStatusResponse(http.StatusForbidden, w, "invalid client id")
 		return
 	}
 
@@ -236,20 +238,7 @@ func (h *Handler) checkCode(code string) (*authorize, bool) {
 	}
 }
 
-func (h *Handler) checkRedirect(a *authorize) bool {
-	// TODO: implement
-	return true
-}
-
-func (h *Handler) checkClient(id string) bool {
-	// TODO: implement
-	return true
-}
-
-func generateRandomString() string {
-	// TODO: fix
-	return fmt.Sprintf("%X", rand.Int63())
-}
+func generateRandomString() string { return fmt.Sprintf("%X", rand.Int63()) }
 
 type bearer struct {
 	Token string `json:"access_token"`
