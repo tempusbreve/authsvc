@@ -18,8 +18,8 @@ function pull-image {
 }
 
 function start-container {
-  DATA="${SCRIPTDIR}/data/"
-  [ -d "${DATA}" ] || mkdir -p "${DATA}"
+  DATA_DIR="${SCRIPTDIR}/data/"
+  [ -d "${DATA_DIR}" ] || mkdir -p "${DATA_DIR}"
 
   docker run -d \
       --name ${NAME} \
@@ -28,8 +28,12 @@ function start-container {
       -e PORT="${PORT}" \
       -e SEED_HASH="${SEED_HASH:-}" \
       -e SEED_BLOCK="${SEED_BLOCK:-}" \
+      -e DATA_HOME="${DATA_HOME:-/data}" \
+      -e PUBLIC_HOME="${PUBLIC_HOME:-/public}" \
+      -e STORAGE="${STORAGE:-boltdb}" \
+      -e CLIENTS="${CLIENTS:-/data/clients.json}" \
       -p ${PORT}:${PORT} \
-      -v "${DATA}":/data \
+      -v "${DATA_DIR}":/data \
     ${IMAGE}
 }
 
