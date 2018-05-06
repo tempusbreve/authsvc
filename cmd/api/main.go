@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"github.com/unrolled/secure"
 	"github.com/urfave/cli"
 	"github.com/urfave/negroni"
+	"golang.org/x/crypto/bcrypt"
 
 	"breve.us/authsvc/authentication"
 	"breve.us/authsvc/common"
@@ -112,11 +114,28 @@ func main() {
 			seedHashFlag,
 			seedBlockFlag,
 			corsOriginsFlag,
-			insecureFlag}}}
+			insecureFlag}}, {
+		Name:   "bcrypt",
+		Action: crypt,
+	}}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatalf("ERROR: %v", err)
 	}
+}
+
+func crypt(ctx *cli.Context) error {
+	if ctx.NArg() == 0 {
+		return errors.New("provide at least one password to crypt")
+	}
+	for _, pwd := range ctx.Args() {
+		res, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%q --> %q\n", pwd, string(res))
+	}
+	return nil
 }
 
 func serve(ctx *cli.Context) error {
@@ -136,6 +155,7 @@ func serve(ctx *cli.Context) error {
 
 	authOpts := &authentication.Options{
 		Realm:       ctx.String("realm"),
+		Checker:     authentication.NewChecker(nil),
 		Seeder:      seeder,
 		PublicRoots: []string{path.Join(oauthRoot, "token")},
 		OAuth:       oauthHandler,

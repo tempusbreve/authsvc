@@ -46,6 +46,7 @@ var (
 // Options provides configuration options to the AuthenticationMiddleware.
 type Options struct {
 	Realm       string
+	Checker     Checker
 	Seeder      common.Seeder
 	PublicRoots []string
 	OAuth       *oauth.Handler
@@ -57,6 +58,9 @@ func NewMiddleware(root string, config *Options) (*Middleware, error) {
 	var err error
 	if config == nil {
 		config = &Options{}
+	}
+	if config.Checker == nil {
+		config.Checker = NewChecker(nil)
 	}
 	if config.Seeder == nil {
 		if config.Seeder, err = common.NewDefaultSeeder(); err != nil {
@@ -174,7 +178,7 @@ func (m *Middleware) validate(username, password string) bool {
 	if username == "" || password == "" {
 		return false
 	}
-	if username == "jweldon" && password == "password" {
+	if m.config.Checker.Authenticate(username, password) {
 		return true
 	}
 	return false
