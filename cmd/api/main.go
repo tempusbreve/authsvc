@@ -59,6 +59,12 @@ var (
 		EnvVar: "DATA_HOME",
 		Value:  "data",
 	}
+	passwordsFlag = cli.StringFlag{
+		Name:   "passwords",
+		Usage:  "JSON-encoded map of usernames to bcrypted passwords",
+		EnvVar: "PASSWORDS",
+		Value:  "",
+	}
 	clientsFlag = cli.StringFlag{
 		Name:   "clients",
 		Usage:  "path to JSON-encoded registered OAuth2 clients",
@@ -109,6 +115,7 @@ func main() {
 			publicFlag,
 			storageFlag,
 			dataFlag,
+			passwordsFlag,
 			clientsFlag,
 			realmFlag,
 			seedHashFlag,
@@ -142,27 +149,7 @@ func serve(ctx *cli.Context) error {
 	listen := fmt.Sprintf(":%d", ctx.Int("port"))
 	verbose := ctx.Bool("verbose")
 
-	opts, err := buildOAuthOptions(ctx)
-	if err != nil {
-		return err
-	}
-	oauthHandler := oauth.NewHandler(opts)
-
-	seeder, err := common.NewSeeder(ctx.String("seedhash"), ctx.String("seedblock"))
-	if err != nil {
-		return err
-	}
-
-	authOpts := &authentication.Options{
-		Realm:       ctx.String("realm"),
-		Checker:     authentication.NewChecker(nil),
-		Seeder:      seeder,
-		PublicRoots: []string{path.Join(oauthRoot, "token")},
-		OAuth:       oauthHandler,
-		Insecure:    ctx.Bool("insecure"),
-	}
-
-	l, err := authentication.NewMiddleware(authRoot, authOpts)
+	authMiddleware, oauthHandler, err := buildAuth(ctx)
 	if err != nil {
 		return err
 	}
@@ -193,9 +180,9 @@ func serve(ctx *cli.Context) error {
 
 	r := mux.NewRouter()
 
-	r.PathPrefix(authRoot).Handler(n.With(negroni.Wrap(l.LoginHandler())))
+	r.PathPrefix(authRoot).Handler(n.With(negroni.Wrap(authMiddleware.LoginHandler())))
 
-	a := n.With(negroni.Handler(l))
+	a := n.With(negroni.Handler(authMiddleware))
 	r.PathPrefix(userRoot).Handler(a.With(negroni.Wrap(user.RegisterAPI(userRoot, verbose))))
 	r.PathPrefix(oauthRoot).Handler(a.With(negroni.Wrap(oauthHandler.RegisterAPI(oauthRoot))))
 
@@ -215,9 +202,30 @@ func serve(ctx *cli.Context) error {
 }
 
 func defaultHandlerFn(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotFound)
 	if _, err := fmt.Fprintf(w, "no handler"); err != nil {
 		log.Printf("error writing response: %v", err)
 	}
+}
+
+func buildAuth(ctx *cli.Context) (*authentication.Middleware, *oauth.Handler, error) {
+	opts, err := buildOAuthOptions(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	oh := oauth.NewHandler(opts)
+
+	ao, err := buildAuthOptions(ctx, oh)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	am, err := authentication.NewMiddleware(authRoot, ao)
+	if err != nil {
+		return nil, nil, err
+	}
+	return am, oh, nil
 }
 
 func buildOAuthOptions(ctx *cli.Context) (*oauth.Options, error) {
@@ -270,4 +278,21 @@ func buildOAuthOptions(ctx *cli.Context) (*oauth.Options, error) {
 		TokenCache: tok,
 		Clients:    clients,
 	}, nil
+}
+
+func buildAuthOptions(ctx *cli.Context, oauthHandler *oauth.Handler) (*authentication.Options, error) {
+	seeder, err := common.NewSeeder(ctx.String("seedhash"), ctx.String("seedblock"))
+	if err != nil {
+		return nil, err
+	}
+
+	authOpts := &authentication.Options{
+		Realm:       ctx.String("realm"),
+		Checker:     authentication.NewChecker(nil),
+		Seeder:      seeder,
+		PublicRoots: []string{path.Join(oauthRoot, "token")},
+		OAuth:       oauthHandler,
+		Insecure:    ctx.Bool("insecure"),
+	}
+	return authOpts, nil
 }
