@@ -60,7 +60,7 @@ func NewMiddleware(root string, config *Options) (*Middleware, error) {
 		config = &Options{}
 	}
 	if config.Checker == nil {
-		config.Checker = NewChecker(nil)
+		config.Checker = NewBasicChecker(nil)
 	}
 	if config.Seeder == nil {
 		if config.Seeder, err = common.NewDefaultSeeder(); err != nil {

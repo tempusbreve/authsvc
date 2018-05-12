@@ -30,7 +30,14 @@ func (a *handler) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u := &Details{
+	type details struct {
+		ID       int    `json:"id"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Name     string `json:"name"`
+		State    string `json:"state"`
+	}
+	u := &details{
 		ID:       1,
 		Username: "johnweldon",
 		Email:    "johnweldon4+hardcoded@gmail.com",
@@ -39,13 +46,4 @@ func (a *handler) handleUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	common.JSONResponse(w, u)
-}
-
-// Details describes the information about a user.
-type Details struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Name     string `json:"name"`
-	State    string `json:"state"`
 }
