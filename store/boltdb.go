@@ -5,18 +5,25 @@ import (
 	"encoding/gob"
 	"log"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/boltdb/bolt"
 )
 
 // NewBoltDBCache implementes Cache with a BoltDB back-end;
-func NewBoltDBCache(path string) (Cache, error) {
-	cache := &bcache{path: path}
+func NewBoltDBCache(path string, bucket string) (Cache, error) {
+	if bucket == "" {
+		bucket = defaultBucket
+	}
+	cache := &bcache{
+		path:   path,
+		bucket: bucket,
+	}
 	switch db, err := cache.open(); err {
 	case nil:
-		_ = db.Close()
-		return cache, nil
+		err = db.Close()
+		return cache, err
 	default:
 		return nil, err
 	}
@@ -31,8 +38,10 @@ func init() {
 }
 
 type bcache struct {
-	now  clockFn
-	path string
+	sync.Once
+	now    clockFn
+	path   string
+	bucket string
 }
 
 func (m *bcache) Put(key string, value interface{}) error {
@@ -84,7 +93,7 @@ func (m *bcache) Keys() []string {
 	defer func() { _ = db.Close() }()
 
 	if err := db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket([]byte(defaultBucket)).ForEach(func(k, v []byte) error {
+		return tx.Bucket([]byte(m.bucket)).ForEach(func(k, v []byte) error {
 			keys = append(keys, string(k))
 			return nil
 		})
@@ -106,7 +115,7 @@ func (m *bcache) put(key string, v *cacheValue) error {
 	if err = enc.Encode(v); err != nil {
 		return err
 	}
-	return db.Update(func(tx *bolt.Tx) error { return tx.Bucket([]byte(defaultBucket)).Put([]byte(key), buf.Bytes()) })
+	return db.Update(func(tx *bolt.Tx) error { return tx.Bucket([]byte(m.bucket)).Put([]byte(key), buf.Bytes()) })
 }
 
 func (m *bcache) get(key string) (*cacheValue, error) {
@@ -117,7 +126,7 @@ func (m *bcache) get(key string) (*cacheValue, error) {
 	defer func() { _ = db.Close() }()
 	v := &cacheValue{}
 	if err = db.View(func(tx *bolt.Tx) error {
-		data := tx.Bucket([]byte(defaultBucket)).Get([]byte(key))
+		data := tx.Bucket([]byte(m.bucket)).Get([]byte(key))
 		if data == nil {
 			return ErrNotFound
 		}
@@ -136,18 +145,20 @@ func (m *bcache) remove(key string) error {
 		return err
 	}
 	defer func() { _ = db.Close() }()
-	return db.Update(deleteKey(defaultBucket, key))
+	return db.Update(deleteKey(m.bucket, key))
 }
 
 func (m *bcache) open() (*bolt.DB, error) {
 	db, err := bolt.Open(m.path, 0600, nil)
 	if err == nil {
-		if err = db.Update(createBucket(defaultBucket)); err == nil {
-			return db, nil
-		}
-		defer func() { _ = db.Close() }()
+		m.Do(func() {
+			err = db.Update(createBucket(m.bucket))
+		})
 	}
-	return nil, err
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 func createBucket(bucket string) func(*bolt.Tx) error {

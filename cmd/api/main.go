@@ -236,21 +236,19 @@ func buildOAuthOptions(ctx *cli.Context) (*oauth.Options, error) {
 		err               error
 	)
 
-	// TODO: some of this should be in the oauth package
-
 	switch ctx.String("storage") {
 	case "boltdb":
-		data := ctx.String("data")
-		if cache, err = store.NewBoltDBCache(path.Join(data, "cache.db")); err != nil {
+		data := path.Join(ctx.String("data"), "storage.db")
+		if cache, err = store.NewBoltDBCache(data, "cache"); err != nil {
 			return nil, err
 		}
-		if ct, err = store.NewBoltDBCache(path.Join(data, "clienttokens.db")); err != nil {
+		if ct, err = store.NewBoltDBCache(data, "clienttokens"); err != nil {
 			return nil, err
 		}
-		if tc, err = store.NewBoltDBCache(path.Join(data, "tokenclients.db")); err != nil {
+		if tc, err = store.NewBoltDBCache(data, "tokenclients"); err != nil {
 			return nil, err
 		}
-		if cr, err = store.NewBoltDBCache(path.Join(data, "clientregistry.db")); err != nil {
+		if cr, err = store.NewBoltDBCache(data, "clientregistry"); err != nil {
 			return nil, err
 		}
 	default:

@@ -28,7 +28,7 @@ var (
 		if err != nil {
 			panic(err)
 		}
-		c, err := NewBoltDBCache(name)
+		c, err := NewBoltDBCache(name, "cache_test")
 		if err != nil {
 			panic(err)
 		}
