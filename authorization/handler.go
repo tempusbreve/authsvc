@@ -1,4 +1,4 @@
-package oauth // import "breve.us/authsvc/oauth"
+package authorization // import "breve.us/authsvc/authorization"
 
 import (
 	"encoding/base64"
@@ -16,8 +16,10 @@ import (
 	"github.com/alecthomas/template"
 	"github.com/gorilla/mux"
 
+	"breve.us/authsvc/client"
 	"breve.us/authsvc/common"
 	"breve.us/authsvc/store"
+	"breve.us/authsvc/user"
 )
 
 func init() {
@@ -45,7 +47,8 @@ type Options struct {
 	GrantTTL   time.Duration
 	Cache      store.Cache
 	TokenCache *TokenCache
-	Clients    *ClientRegistry
+	Clients    *client.Registry
+	Users      *user.Registry
 }
 
 // RegisterAPI returns a router that handles OAuth routes.
@@ -86,22 +89,11 @@ type Handler struct {
 // Authorized returns the authorized scopes for a request, or an error
 // if the request does not have sufficient authorization.
 func (h *Handler) Authorized(r *http.Request) ([]string, error) {
-	auth := r.Header.Get("Authorization")
-	if auth != "" {
-		switch {
-		case strings.HasPrefix(auth, "Bearer "):
-			if h.validToken(auth[7:]) {
-				return []string{ScopeAll}, nil
-			}
-		}
+	c := NewRequestChecker(h.opts.TokenCache, h.opts.Users)
+	if c.IsAuthenticated(r) != "" {
+		return []string{ScopeAll}, nil
 	}
 	return nil, ErrNotAuthorized
-}
-
-func (h *Handler) validToken(token string) bool {
-	_, err := h.opts.TokenCache.Get(token)
-	// TODO: validate client id here (locked out, etc.)
-	return err == nil
 }
 
 func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +139,9 @@ func (h *Handler) handleApprove(w http.ResponseWriter, r *http.Request) {
 		common.Redirect(w, r, a.RedirectURI, map[string]string{"error": "unsupported_response_type"})
 		return
 	}
+	if username := common.GetUsername(r.Context()); username != "" {
+		a.Username = username
+	}
 	code := h.addToCache(a)
 	common.Redirect(w, r, a.RedirectURI, map[string]string{"code": code, "state": a.State})
 }
@@ -186,7 +181,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 		tok := generateRandomString()
-		h.addClient(tok, creds.ID)
+		h.addClient(tok, t.Username)
 		common.JSONResponse(w, &bearer{Token: tok, Type: "Bearer"})
 	default:
 		common.JSONStatusResponse(http.StatusForbidden, w, "unsupported grant type")
@@ -209,9 +204,9 @@ func (h *Handler) handleDefault(w http.ResponseWriter, r *http.Request) {
 	common.JSONResponse(w, obj)
 }
 
-func (h *Handler) addClient(tok string, id string) {
+func (h *Handler) addClient(tok string, username string) {
 	expire := time.Now().Add(h.opts.GrantTTL)
-	if err := h.opts.TokenCache.PutUntil(expire, id, tok); err != nil {
+	if err := h.opts.TokenCache.PutUntil(expire, username, tok); err != nil {
 		panic(err)
 	}
 }
@@ -284,6 +279,7 @@ type authorize struct {
 	ClientID     string
 	RedirectURI  string
 	State        string
+	Username     string
 }
 
 func parseAuthorize(v url.Values) *authorize {

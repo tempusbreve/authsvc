@@ -1,4 +1,4 @@
-package store
+package store // import "breve.us/authsvc/store"
 
 import (
 	"bytes"

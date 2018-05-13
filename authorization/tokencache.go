@@ -1,4 +1,4 @@
-package oauth // import "breve.us/authsvc/oauth"
+package authorization // import "breve.us/authsvc/authorization"
 
 import (
 	"errors"

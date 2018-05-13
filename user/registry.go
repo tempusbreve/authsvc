@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 
+	"golang.org/x/crypto/bcrypt"
+
+	"breve.us/authsvc/common"
 	"breve.us/authsvc/store"
 )
 
@@ -20,12 +24,22 @@ func init() {
 
 // Details describes the user details
 type Details struct {
-	ID       int
-	Username string
-	Password string
-	Email    string
-	Name     string
-	State    string
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	State    string `json:"state"`
+}
+
+func (d *Details) toFilteredMap() map[string]interface{} {
+	return map[string]interface{}{
+		"id":       d.ID,
+		"username": d.Username,
+		"email":    d.Email,
+		"Name":     d.Name,
+		"State":    d.State,
+	}
 }
 
 // Registry maintains the known users
@@ -33,8 +47,8 @@ type Registry struct {
 	cache store.Cache
 }
 
-// NewUserRegistry returns an initialized UserRegistry
-func NewUserRegistry(cache store.Cache) *Registry { return &Registry{cache: cache} }
+// NewRegistry returns an initialized UserRegistry
+func NewRegistry(cache store.Cache) *Registry { return &Registry{cache: cache} }
 
 // Get returns a user registration by username, or an error if not found
 func (u *Registry) Get(username string) (*Details, error) {
@@ -87,5 +101,79 @@ func (u *Registry) SaveToJSON(w io.Writer) error {
 			return err
 		}
 	}
-	return json.NewEncoder(w).Encode(users)
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(users)
+}
+
+// BcryptChecker creates in implementation of common.Checker that uses
+// bcrypt to verify password against the password field in the user
+// details
+func (u *Registry) BcryptChecker() common.PasswordChecker {
+	return &bchecker{r: u}
+}
+
+type bchecker struct {
+	r *Registry
+}
+
+// IsAuthenticated requires that neither username nor password is empty,
+// the username is valid, the stored user state is "active", the
+// stored password is not empty, and that the supplied password matches
+// the stored password when compared with a bcrypt algorithm
+func (b *bchecker) IsAuthenticated(username, password string) bool {
+	log.Printf("Bcrypt PasswordChecker.IsAuthenticated(%q, %q)", username, password)
+	if username == "" || password == "" {
+		return false
+	}
+	u, err := b.r.Get(username)
+	if err != nil {
+		return false
+	}
+	if u.State != "active" {
+		return false
+	}
+	if u.Password == "" {
+		return false
+	}
+	if bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password)) == nil {
+		return true
+	}
+	return false
+}
+
+// PlainTextChecker creates in implementation of common.Checker that uses
+// simple text comparison to verify password against the plain text
+// password field in the user details
+func (u *Registry) PlainTextChecker() common.PasswordChecker {
+	return &pchecker{r: u}
+}
+
+type pchecker struct {
+	r *Registry
+}
+
+// IsAuthenticated requires that neither username nor password is empty,
+// the username is valid, the stored user state is "active", the
+// stored password is not empty, and that the supplied password matches
+// the stored password when compared as plain text strings
+func (p *pchecker) IsAuthenticated(username, password string) bool {
+	log.Printf("Plain PasswordChecker.IsAuthenticated(%q, %q)", username, password)
+	if username == "" || password == "" {
+		return false
+	}
+	u, err := p.r.Get(username)
+	if err != nil {
+		return false
+	}
+	if u.State != "active" {
+		return false
+	}
+	if u.Password == "" {
+		return false
+	}
+	if password == u.Password {
+		return true
+	}
+	return false
 }

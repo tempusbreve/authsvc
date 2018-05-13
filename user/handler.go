@@ -9,19 +9,26 @@ import (
 	"breve.us/authsvc/common"
 )
 
+// Options are user API handler options
+type Options struct {
+	Root    string
+	Verbose bool
+	Users   *Registry
+}
+
 // RegisterAPI returns a router for the api.
-func RegisterAPI(root string, verbose bool) http.Handler {
-	a := &handler{root: root}
+func RegisterAPI(opts Options) http.Handler {
+	a := &handler{opts: opts}
 	mx := mux.NewRouter()
-	mx.Path(root).HandlerFunc(a.handleUser).Methods("GET")
-	if !strings.HasSuffix(root, "/") {
-		mx.Path(root + "/").HandlerFunc(a.handleUser).Methods("GET")
+	mx.Path(opts.Root).HandlerFunc(a.handleUser).Methods("GET")
+	if !strings.HasSuffix(opts.Root, "/") {
+		mx.Path(opts.Root + "/").HandlerFunc(a.handleUser).Methods("GET")
 	}
 	return mx
 }
 
 type handler struct {
-	root string
+	opts Options
 }
 
 func (a *handler) handleUser(w http.ResponseWriter, r *http.Request) {
@@ -30,20 +37,12 @@ func (a *handler) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type details struct {
-		ID       int    `json:"id"`
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Name     string `json:"name"`
-		State    string `json:"state"`
-	}
-	u := &details{
-		ID:       1,
-		Username: "johnweldon",
-		Email:    "johnweldon4+hardcoded@gmail.com",
-		Name:     "John Weldon",
-		State:    "active",
+	if username := common.GetUsername(r.Context()); username != "" {
+		if u, err := a.opts.Users.Get(username); err == nil {
+			common.JSONResponse(w, u.toFilteredMap())
+			return
+		}
 	}
 
-	common.JSONResponse(w, u)
+	common.JSONStatusResponse(http.StatusBadRequest, w, "not logged in")
 }

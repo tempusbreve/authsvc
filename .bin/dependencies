@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+set -e
+
+PACKAGE="breve.us/authsvc"
+
+#
+# Put ourselves at the known project root location, and go back where
+# we were on exit.
+#
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+function _trap_exit() {
+  popd &> /dev/null
+}
+trap _trap_exit EXIT
+pushd "${PROJECT_ROOT}" &> /dev/null
+
+
+TEMPLATE='{{ .ImportPath }}{{ range .Imports }}{{ printf "\n-> %s" .}}{{ end }}{{ printf "\n\n" }}'
+FILTER="/^.*vendor.*$/d;/^$/p;\|^.*${PACKAGE}.*$|p;d"
+
+go list -f "${TEMPLATE}" ./... | sed -e "${FILTER}"

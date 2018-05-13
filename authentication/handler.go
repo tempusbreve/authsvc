@@ -13,7 +13,8 @@ import (
 	"github.com/gorilla/securecookie"
 
 	"breve.us/authsvc/common"
-	"breve.us/authsvc/oauth"
+	"breve.us/authsvc/store"
+	"breve.us/authsvc/user"
 )
 
 // Exported Errors
@@ -45,12 +46,35 @@ var (
 
 // Options provides configuration options to the AuthenticationMiddleware.
 type Options struct {
-	Realm       string
-	Checker     Checker
-	Seeder      common.Seeder
-	PublicRoots []string
-	OAuth       *oauth.Handler
-	Insecure    bool
+	Realm           string
+	PublicRoots     []string
+	PasswordChecker common.PasswordChecker
+	RequestChecker  common.RequestChecker
+	KeyProvider     common.KeyProvider
+	Users           *user.Registry
+	Insecure        bool
+}
+
+// NewConfig builds an Options struct for the Authentication Middleware
+func NewConfig(
+	realm string,
+	exclude []string,
+	insecure bool,
+	keyProvider common.KeyProvider,
+	passwordChecker common.PasswordChecker,
+	requestChecker common.RequestChecker,
+	users *user.Registry) (*Options, error) {
+
+	opts := &Options{
+		Realm:           realm,
+		PublicRoots:     exclude,
+		PasswordChecker: passwordChecker,
+		RequestChecker:  requestChecker,
+		KeyProvider:     keyProvider,
+		Users:           users,
+		Insecure:        insecure,
+	}
+	return opts, nil
 }
 
 // NewMiddleware returns a middlware suitable for authentication.
@@ -59,21 +83,24 @@ func NewMiddleware(root string, config *Options) (*Middleware, error) {
 	if config == nil {
 		config = &Options{}
 	}
-	if config.Checker == nil {
-		config.Checker = NewBasicChecker(nil)
+	if config.PasswordChecker == nil {
+		config.PasswordChecker = NewBasicChecker(nil)
 	}
-	if config.Seeder == nil {
-		if config.Seeder, err = common.NewDefaultSeeder(); err != nil {
+	if config.KeyProvider == nil {
+		if config.KeyProvider, err = common.DefaultKeyProvider(); err != nil {
 			return nil, err
 		}
 	}
-	if config.OAuth == nil {
-		config.OAuth = oauth.NewHandler(nil)
+	if config.Users == nil {
+		config.Users = user.NewRegistry(store.NewMemoryCache())
 	}
+	sc := securecookie.New(config.KeyProvider.Hash(), config.KeyProvider.Block())
+	config.RequestChecker = common.RequestCheckers(cookieRequestChecker(sc, config.Users), config.RequestChecker)
+
 	return &Middleware{
 		authRoot: root,
 		config:   config,
-		cookie:   securecookie.New(config.Seeder.HashKey(), config.Seeder.BlockKey()),
+		cookie:   sc,
 	}, nil
 }
 
@@ -89,16 +116,11 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request, n http.Ha
 		n(w, r)
 		return
 	}
-
-	switch err := m.authenticated(r); err {
-	case nil:
-		n(w, r)
-	case ErrNoAuthToken:
-		m.unauthorized(w, r.URL, nil)
-	default:
-		m.clearLoginCookie(w)
-		m.unauthorized(w, r.URL, err)
+	if username := m.config.RequestChecker.IsAuthenticated(r); username != "" {
+		n(w, r.WithContext(common.SetUsername(r.Context(), username)))
+		return
 	}
+	m.unauthorized(w, r.URL, nil)
 }
 
 // LoginHandler returns a router that handles the login and logout routes.
@@ -118,7 +140,7 @@ func (m *Middleware) loginPOST(w http.ResponseWriter, r *http.Request) {
 	case "Login":
 		username := r.Form.Get("username")
 		password := r.Form.Get("password")
-		if !m.validate(username, password) {
+		if !m.config.PasswordChecker.IsAuthenticated(username, password) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -174,16 +196,6 @@ func (m *Middleware) clearLoginCookie(w http.ResponseWriter) {
 	})
 }
 
-func (m *Middleware) validate(username, password string) bool {
-	if username == "" || password == "" {
-		return false
-	}
-	if m.config.Checker.Authenticate(username, password) {
-		return true
-	}
-	return false
-}
-
 func (m *Middleware) whitelisted(r *http.Request) bool {
 	path := r.URL.Path
 	for _, root := range m.config.PublicRoots {
@@ -192,28 +204,6 @@ func (m *Middleware) whitelisted(r *http.Request) bool {
 		}
 	}
 	return false
-}
-
-func (m *Middleware) authenticated(r *http.Request) error {
-	if r.Header.Get("Authorization") != "" {
-		if scopes, err := m.config.OAuth.Authorized(r); err == nil && len(scopes) > 0 {
-			// TODO: validate scopes
-			return nil
-		}
-	}
-	switch c, err := r.Cookie(cookieName); err {
-	case nil:
-		data := map[string]string{}
-		if err := m.cookie.Decode(cookieName, c.Value, &data); err != nil {
-			return ErrInvalidRequest
-		}
-		// TODO: verify username (locked out, etc)
-		return nil
-	case http.ErrNoCookie:
-		return ErrNoAuthToken
-	default:
-		return ErrInvalidRequest
-	}
 }
 
 func (m *Middleware) unauthorized(w http.ResponseWriter, originalURL fmt.Stringer, err error) {

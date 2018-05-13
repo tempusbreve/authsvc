@@ -40,7 +40,7 @@ func (l *DebugMiddleware) requestLogger(r *http.Request) {
 			l.l.Printf("error dumping request: %v", err)
 			return
 		}
-		fmt.Fprint(l.o, "|REQUEST|\n")
+		fmt.Fprint(l.o, "\n -------\n|REQUEST|\n")
 		if _, err = l.o.Write(b); err != nil {
 			l.l.Printf("error writing dumped request: %v", err)
 			return

@@ -13,21 +13,21 @@ const (
 	BlockKeySize = 32
 )
 
-// Seeder describes functions needed for encrypted cookies.
-type Seeder interface {
-	HashKey() []byte
-	BlockKey() []byte
+// KeyProvider describes functions needed for encrypted cookies.
+type KeyProvider interface {
+	Hash() []byte
+	Block() []byte
 }
 
-// NewDefaultSeeder creates random default values for the Seeder. This
-// is only good for one execution run, unless the generated keys are
-// persisted.
-func NewDefaultSeeder() (Seeder, error) {
-	return NewSeeder(Generate(HashKeySize), Generate(BlockKeySize))
+// DefaultKeyProvider creates random default values for the provider.
+// This is only good for one execution run, unless the generated keys
+// are persisted.
+func DefaultKeyProvider() (KeyProvider, error) {
+	return NewKeyProvider(Generate(HashKeySize), Generate(BlockKeySize))
 }
 
-// NewSeeder creates a default Seeder from base64 encoded seed values.
-func NewSeeder(hash string, block string) (Seeder, error) {
+// NewKeyProvider creates a default provider from base64 encoded values.
+func NewKeyProvider(hash string, block string) (KeyProvider, error) {
 	var (
 		hashb, blockb []byte
 		err           error
@@ -38,7 +38,7 @@ func NewSeeder(hash string, block string) (Seeder, error) {
 	if blockb, err = Decode(block); err != nil {
 		return nil, err
 	}
-	return &defseeder{hash: hashb, block: blockb}, nil
+	return &defaultProvider{hash: hashb, block: blockb}, nil
 }
 
 // Generate creates a random key of keysize length, and returns it in
@@ -54,12 +54,12 @@ func Decode(hash string) ([]byte, error) {
 		DecodeString(hash)
 }
 
-type defseeder struct {
+type defaultProvider struct {
 	hash  []byte
 	block []byte
 }
 
-func (s *defseeder) HashKey() []byte {
+func (s *defaultProvider) Hash() []byte {
 	if s == nil {
 		return nil
 	}
@@ -69,7 +69,7 @@ func (s *defseeder) HashKey() []byte {
 	return s.hash
 }
 
-func (s *defseeder) BlockKey() []byte {
+func (s *defaultProvider) Block() []byte {
 	if s == nil {
 		return nil
 	}

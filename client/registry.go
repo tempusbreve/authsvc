@@ -1,20 +1,26 @@
-package oauth // import "breve.us/authsvc/oauth"
+package client // import "breve.us/authsvc/client"
 
 import (
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"io"
 	"time"
 
 	"breve.us/authsvc/store"
 )
 
+// Errors
+var (
+	ErrNotFound = errors.New("client id not found")
+)
+
 func init() {
-	gob.Register(&Client{})
+	gob.Register(&Details{})
 }
 
-// Client represents a registered client application
-type Client struct {
+// Details represents a registered client application
+type Details struct {
 	// ID is the unique identifier for the client
 	ID string `json:"id"`
 	// Name is the user friendly name of the client application
@@ -23,23 +29,23 @@ type Client struct {
 	Endpoints []string `json:"endpoints"`
 }
 
-// ClientRegistry is the manager for all registered clients
-type ClientRegistry struct {
+// Registry is the manager for all registered clients
+type Registry struct {
 	cache store.Cache
 }
 
-// NewClientRegistry returns an initialized ClientRegistry
-func NewClientRegistry(cache store.Cache) *ClientRegistry { return &ClientRegistry{cache: cache} }
+// NewRegistry returns an initialized ClientRegistry
+func NewRegistry(cache store.Cache) *Registry { return &Registry{cache: cache} }
 
 // VerifyClient returns true if the client is a registered client
-func (c *ClientRegistry) VerifyClient(client string) bool {
+func (c *Registry) VerifyClient(client string) bool {
 	_, err := c.Get(client)
 	return err == nil
 }
 
 // VerifyRedirect returns true if the client is a registered client, and
 // the redirect uri is an approved uri
-func (c *ClientRegistry) VerifyRedirect(client string, redirect string) bool {
+func (c *Registry) VerifyRedirect(client string, redirect string) bool {
 	cl, err := c.Get(client)
 	if err != nil {
 		return false
@@ -53,35 +59,35 @@ func (c *ClientRegistry) VerifyRedirect(client string, redirect string) bool {
 }
 
 // Get returns a client registration by id, or an error if not found
-func (c *ClientRegistry) Get(id string) (*Client, error) {
+func (c *Registry) Get(id string) (*Details, error) {
 	v, err := c.cache.Get(id)
 	if err != nil {
 		return nil, err
 	}
-	if client, ok := v.(*Client); ok {
+	if client, ok := v.(*Details); ok {
 		return client, nil
 	}
-	return nil, ErrInvalidClient
+	return nil, ErrNotFound
 }
 
 // Put save the client registration
-func (c *ClientRegistry) Put(client *Client) error { return c.cache.Put(client.ID, client) }
+func (c *Registry) Put(client *Details) error { return c.cache.Put(client.ID, client) }
 
 // PutUntil saves the client registration until the expiration date
-func (c *ClientRegistry) PutUntil(expire time.Time, client *Client) error {
+func (c *Registry) PutUntil(expire time.Time, client *Details) error {
 	return c.cache.PutUntil(expire, client.ID, client)
 }
 
 // Delete removes the client registration
-func (c *ClientRegistry) Delete(id string) error {
+func (c *Registry) Delete(id string) error {
 	return c.cache.Delete(id)
 }
 
 // LoadFromJSON loads clients encoded in JSON
-func (c *ClientRegistry) LoadFromJSON(r io.Reader) error {
+func (c *Registry) LoadFromJSON(r io.Reader) error {
 	var (
-		clientSlice []Client
-		client      Client
+		clientSlice []Details
+		client      Details
 	)
 	dec := json.NewDecoder(r)
 	if dec.Decode(&clientSlice) != nil {
@@ -99,11 +105,11 @@ func (c *ClientRegistry) LoadFromJSON(r io.Reader) error {
 }
 
 // SaveToJSON stores the registry clients to the io.Writer as JSON
-func (c *ClientRegistry) SaveToJSON(w io.Writer) error {
-	var clients []Client
+func (c *Registry) SaveToJSON(w io.Writer) error {
+	var clients []Details
 	for _, id := range c.cache.Keys() {
 		if v, err := c.cache.Get(id); err == nil {
-			if client, ok := v.(*Client); ok {
+			if client, ok := v.(*Details); ok {
 				clients = append(clients, *client)
 			}
 		} else {
@@ -111,5 +117,6 @@ func (c *ClientRegistry) SaveToJSON(w io.Writer) error {
 		}
 	}
 	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
 	return enc.Encode(clients)
 }
