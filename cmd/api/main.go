@@ -15,6 +15,7 @@ func main() {
 	app.Version = version
 	app.Commands = []cli.Command{
 		newServeCmd(),
+		newUserCmd(),
 		newGenerateCmd(),
 		newBcryptCmd(),
 	}
