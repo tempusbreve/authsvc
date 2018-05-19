@@ -26,13 +26,13 @@ func (c *requestChecker) IsAuthenticated(r *http.Request) string {
 		if u, err := c.tc.Get(tok); err == nil {
 			if username, ok := u.(string); ok {
 				log.Printf("Bearer RequestChecker.IsAuthenticated() Username: %q", username)
-				if d, err := c.ur.Get(username); err == nil {
+				if d, err2 := c.ur.Get(username); err2 == nil {
 					log.Printf("Bearer RequestChecker.IsAuthenticated() details: %+v", d)
 					if d.State == "active" {
 						return username
 					}
 				} else {
-					log.Printf("ERROR: Bearer RequestChecker - registry Get %v", err)
+					log.Printf("ERROR: Bearer RequestChecker - registry Get %v", err2)
 				}
 			}
 		} else {
