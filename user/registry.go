@@ -22,14 +22,23 @@ func init() {
 	gob.Register(&Details{})
 }
 
+// State describes User States
+type State string
+
+// Valid User States
+const (
+	Active   State = "active"
+	Inactive State = "inactive"
+)
+
 // Details describes the user details
 type Details struct {
-	ID       int    `json:"id"`
+	ID       uint64 `json:"id"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Email    string `json:"email"`
 	Name     string `json:"name"`
-	State    string `json:"state"`
+	State    State  `json:"state"`
 }
 
 func (d *Details) toFilteredMap() map[string]interface{} {
@@ -122,7 +131,7 @@ type bchecker struct {
 }
 
 // IsAuthenticated requires that neither username nor password is empty,
-// the username is valid, the stored user state is "active", the
+// the username is valid, the stored user state is Active, the
 // stored password is not empty, and that the supplied password matches
 // the stored password when compared with a bcrypt algorithm
 func (b *bchecker) IsAuthenticated(username, password string) bool {
@@ -134,7 +143,7 @@ func (b *bchecker) IsAuthenticated(username, password string) bool {
 	if err != nil {
 		return false
 	}
-	if u.State != "active" {
+	if u.State != Active {
 		return false
 	}
 	if u.Password == "" {
@@ -158,7 +167,7 @@ type pchecker struct {
 }
 
 // IsAuthenticated requires that neither username nor password is empty,
-// the username is valid, the stored user state is "active", the
+// the username is valid, the stored user state is Active, the
 // stored password is not empty, and that the supplied password matches
 // the stored password when compared as plain text strings
 func (p *pchecker) IsAuthenticated(username, password string) bool {
@@ -170,7 +179,7 @@ func (p *pchecker) IsAuthenticated(username, password string) bool {
 	if err != nil {
 		return false
 	}
-	if u.State != "active" {
+	if u.State != Active {
 		return false
 	}
 	if u.Password == "" {

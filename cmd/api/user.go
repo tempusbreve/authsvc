@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/urfave/cli"
@@ -12,9 +13,45 @@ func newUserCmd() cli.Command {
 	return cli.Command{
 		Name: "user",
 		Subcommands: cli.Commands{
+			newGetUserCmd(),
 			newListUsersCmd(),
 		},
 	}
+}
+
+func newGetUserCmd() cli.Command {
+	return cli.Command{
+		Name:    "get",
+		Aliases: []string{"g"},
+		Action:  getUser,
+		Flags: []cli.Flag{
+			ldapHostFlag,
+			ldapPortFlag,
+			ldapBaseDNFlag,
+			ldapUserFlag,
+			ldapPasswordFlag,
+		},
+	}
+}
+
+func getUser(ctx *cli.Context) error {
+	cache := user.NewLDAPCache(&user.LDAPConfig{
+		Host:     ctx.String(ldapHost),
+		Port:     ctx.Int(ldapPort),
+		Username: ctx.String(ldapUser),
+		Password: ctx.String(ldapPass),
+		BaseDN:   ctx.String(ldapBaseDN),
+	})
+	uid := ctx.Args().First()
+	if uid == "" {
+		return errors.New("expecting uid as parameter")
+	}
+	m, err := cache.Get(uid)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(ctx.App.Writer, "%+v\n", m)
+	return err
 }
 
 func newListUsersCmd() cli.Command {
