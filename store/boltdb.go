@@ -3,7 +3,6 @@ package store // import "breve.us/authsvc/store"
 import (
 	"bytes"
 	"encoding/gob"
-	"log"
 	"sort"
 	"sync"
 	"time"
@@ -83,12 +82,12 @@ func (m *bcache) Delete(key string) error {
 	return m.remove(key)
 }
 
-func (m *bcache) Keys() []string {
+func (m *bcache) Keys() ([]string, error) {
 	var keys []string
 
 	db, err := m.open()
 	if err != nil {
-		return keys
+		return keys, err
 	}
 	defer func() { _ = db.Close() }()
 
@@ -98,10 +97,10 @@ func (m *bcache) Keys() []string {
 			return nil
 		})
 	}); err != nil {
-		log.Printf("error iterating keys: %v", err)
+		return keys, err
 	}
 	sort.Strings(keys)
-	return keys
+	return keys, nil
 }
 
 func (m *bcache) put(key string, v *cacheValue) error {

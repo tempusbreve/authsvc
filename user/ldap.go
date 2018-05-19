@@ -22,8 +22,8 @@ type LDAPConfig struct {
 }
 
 // NewLDAPCache returns a cache suitable for interacting with LDAP
-func NewLDAPCache(config *LDAPConfig, class string) store.Cache {
-	return &ldapCache{config: config, class: class}
+func NewLDAPCache(config *LDAPConfig) store.Cache {
+	return &ldapCache{config: config, class: "inetOrgPerson"}
 }
 
 type ldapCache struct {
@@ -36,17 +36,24 @@ func (c *ldapCache) PutUntil(time time.Time, key string, value interface{}) erro
 func (c *ldapCache) Get(key string) (interface{}, error)                          { return nil, nil }
 func (c *ldapCache) Delete(key string) error                                      { return nil }
 
-func (c *ldapCache) Keys() []string {
+func (c *ldapCache) Keys() ([]string, error) {
 	cn, err := ldap.Dial("tcp", fmt.Sprintf("%s:%d", c.config.Host, c.config.Port))
 	if err != nil {
-		return nil
+		log.Printf("ERROR: dialing LDAP: %v", err)
+		return nil, err
 	}
 	defer cn.Close()
 
 	if c.config.UseTLS {
 		if err = cn.StartTLS(&tls.Config{InsecureSkipVerify: false}); err != nil {
-			return nil
+			log.Printf("ERROR: StartTLS: %v", err)
+			return nil, err
 		}
+	}
+
+	if err = cn.Bind(c.config.Username, c.config.Password); err != nil {
+		log.Printf("ERROR: LDAP Bind %q/%q: %v", c.config.Username, c.config.Password, err)
+		return nil, err
 	}
 
 	r := ldap.NewSearchRequest(
@@ -54,15 +61,15 @@ func (c *ldapCache) Keys() []string {
 		ldap.ScopeWholeSubtree,
 		ldap.NeverDerefAliases,
 		0, 0, false,
-		fmt.Sprintf("(&(objectClass=%s))", c.class),
-		[]string{"dn"},
+		fmt.Sprintf("(objectClass=%s)", c.class),
+		[]string{"dn", "cn", "mail"},
 		nil,
 	)
 
 	res, err := cn.Search(r)
 	if err != nil {
 		log.Printf("ERROR: listing keys: %v", err)
-		return nil
+		return nil, err
 	}
 
 	var keys []string
@@ -70,5 +77,5 @@ func (c *ldapCache) Keys() []string {
 		keys = append(keys, item.DN)
 	}
 
-	return keys
+	return keys, nil
 }

@@ -63,7 +63,7 @@ func (m *memory) Delete(key string) error {
 	return nil
 }
 
-func (m *memory) Keys() []string {
+func (m *memory) Keys() ([]string, error) {
 	var keys []string
 	if m != nil {
 		for k := range m.data {
@@ -71,5 +71,5 @@ func (m *memory) Keys() []string {
 		}
 	}
 	sort.Strings(keys)
-	return keys
+	return keys, nil
 }

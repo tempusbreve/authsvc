@@ -107,7 +107,11 @@ func (c *Registry) LoadFromJSON(r io.Reader) error {
 // SaveToJSON stores the registry clients to the io.Writer as JSON
 func (c *Registry) SaveToJSON(w io.Writer) error {
 	var clients []Details
-	for _, id := range c.cache.Keys() {
+	keys, err := c.cache.Keys()
+	if err != nil {
+		return err
+	}
+	for _, id := range keys {
 		if v, err := c.cache.Get(id); err == nil {
 			if client, ok := v.(*Details); ok {
 				clients = append(clients, *client)

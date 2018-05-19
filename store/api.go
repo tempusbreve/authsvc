@@ -19,7 +19,7 @@ type Cache interface {
 	PutUntil(time time.Time, key string, value interface{}) error
 	Get(key string) (interface{}, error)
 	Delete(key string) error
-	Keys() []string
+	Keys() ([]string, error)
 }
 
 type cacheValue struct {
