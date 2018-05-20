@@ -9,13 +9,12 @@ import (
 	"breve.us/authsvc/user"
 )
 
-// NewRequestChecker returns a Bearer Token request checker
-func NewRequestChecker(cache *TokenCache, users *user.Registry) common.RequestChecker {
+func newTokenRequestChecker(cache *tokenCache, users *user.Registry) common.RequestChecker {
 	return &requestChecker{tc: cache, ur: users}
 }
 
 type requestChecker struct {
-	tc *TokenCache
+	tc *tokenCache
 	ur *user.Registry
 }
 

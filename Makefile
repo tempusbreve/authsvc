@@ -7,7 +7,7 @@ help: ## Display help text.
 clean: ## Clean up build artifacts
 	@echo "cleanup"
 	@go clean ./...
-	@-rm ./api
+	@-rm ./api ./authserver ./userserver
 
 deps: ## Ensure dependencies
 	@echo "ensure dependencies"

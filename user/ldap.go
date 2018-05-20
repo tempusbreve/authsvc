@@ -1,126 +1,97 @@
 package user // import "breve.us/authsvc/user"
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"time"
+	"log"
 
 	ldap "gopkg.in/ldap.v2"
 
+	"breve.us/authsvc/common"
 	"breve.us/authsvc/store"
 )
 
 // Errors
 var (
-	ErrNotImplemented = errors.New("not implemented")
-	ErrNotSupported   = errors.New("not supported")
-	ErrNotFound       = errors.New("not found")
+	ErrNotFound = errors.New("not found")
 )
 
-// LDAPConfig describes connection details to an LDAP server
-type LDAPConfig struct {
-	Host     string
-	Port     int
-	UseTLS   bool
-	Username string
-	Password string
-	BaseDN   string
+// NewLDAPChecker returns a password checker using LDAP
+func NewLDAPChecker(config *store.LDAPConfig) common.PasswordChecker {
+	return &checker{cfg: config}
+}
+
+type checker struct {
+	cfg *store.LDAPConfig
+}
+
+func (c *checker) IsAuthenticated(username string, password string) bool {
+	cn, err := c.cfg.Connect()
+	if err != nil {
+		return false
+	}
+	defer cn.Close()
+
+	var res *ldap.SearchResult
+	for _, attr := range usernameAttributes {
+		if res, err = store.SearchLDAP(cn, c.cfg.BaseDN, fmt.Sprintf("(%s=%s)", attr, username), "cn"); err != nil {
+			log.Printf("WARN: error searching for baseDN %q and username %q: %v", c.cfg.BaseDN, username, err)
+			continue
+		}
+		switch len(res.Entries) {
+		case 1:
+			e := res.Entries[0]
+			if err = cn.Bind(e.DN, password); err == nil {
+				log.Printf("password verified: %q: %s", username, e.DN)
+				return true
+			}
+		case 0:
+			continue
+		default:
+			log.Printf("WARN: unexpectedly found multiple entries for baseDN %q and username %q: %+v", c.cfg.BaseDN, username, res.Entries)
+			continue
+		}
+	}
+	return false
 }
 
 // NewLDAPCache returns a cache suitable for interacting with LDAP
-func NewLDAPCache(config *LDAPConfig) store.Cache {
-	return &ldapCache{config: config, class: "inetOrgPerson"}
-}
-
-type ldapCache struct {
-	config *LDAPConfig
-	class  string
-}
-
-func (c *ldapCache) Delete(key string) error                 { return ErrNotSupported }
-func (c *ldapCache) Put(key string, value interface{}) error { return ErrNotSupported }
-func (c *ldapCache) PutUntil(time time.Time, key string, value interface{}) error {
-	return ErrNotSupported
+func NewLDAPCache(config *store.LDAPConfig) store.Cache {
+	return store.NewLDAPCache(config, "inetOrgPerson", recordFn)
 }
 
 var usernameAttributes = []string{"uid", "mail"}
 
-func (c *ldapCache) Get(key string) (interface{}, error) {
+func recordFn(basedn string, key string) (interface{}, func(*ldap.Conn) error) {
 	det := &Details{}
-	if err := c.doWithConnection(func(cn *ldap.Conn) error {
+	fn := func(cn *ldap.Conn) error {
 		var (
 			err error
 			res *ldap.SearchResult
 		)
 		for _, attr := range usernameAttributes {
-			if res, err = search(cn, c.config.BaseDN, fmt.Sprintf("(%s=%s)", attr, key), "*"); err != nil {
+			if res, err = store.SearchLDAP(cn, basedn, fmt.Sprintf("(%s=%s)", attr, key), "*"); err != nil {
+				log.Printf("WARN: error searching for baseDN %q and key %q: %v", basedn, key, err)
 				continue
 			}
-			if len(res.Entries) != 1 {
-				// TODO: debug logging?
+			switch len(res.Entries) {
+			case 0:
+				continue
+			case 1:
+				return populateDetails(attr, det, res.Entries[0])
+			default:
+				log.Printf("WARN: unexpectedly found multiple entries for baseDN %q and key %q: %+v", basedn, key, res.Entries)
 				continue
 			}
-			return populateDetails(attr, det, res.Entries[0])
 		}
 		return ErrNotFound
-	}); err != nil {
-		return nil, err
 	}
-	return det, nil
-}
-
-func (c *ldapCache) Keys() ([]string, error) {
-	var keys []string
-	if err := c.doWithConnection(func(cn *ldap.Conn) error {
-		filter := fmt.Sprintf("(objectClass=%s)", c.class)
-		res, err := search(cn, c.config.BaseDN, filter, "dn")
-		if err != nil {
-			return err
-		}
-		for _, item := range res.Entries {
-			keys = append(keys, item.DN)
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return keys, nil
-}
-
-func (c *ldapCache) doWithConnection(fn func(cn *ldap.Conn) error) error {
-	cn, err := ldap.Dial("tcp", fmt.Sprintf("%s:%d", c.config.Host, c.config.Port))
-	if err != nil {
-		return err
-	}
-	defer cn.Close()
-
-	if c.config.UseTLS {
-		if err = cn.StartTLS(&tls.Config{InsecureSkipVerify: false}); err != nil {
-			return err
-		}
-	}
-
-	if err = cn.Bind(c.config.Username, c.config.Password); err != nil {
-		return err
-	}
-
-	return fn(cn)
-}
-
-func search(cn *ldap.Conn, basedn string, filter string, attributes ...string) (*ldap.SearchResult, error) {
-	r := ldap.NewSearchRequest(
-		basedn,
-		ldap.ScopeWholeSubtree,
-		ldap.NeverDerefAliases,
-		0, 0, false,
-		filter, attributes, nil)
-	return cn.Search(r)
+	return det, fn
 }
 
 func populateDetails(key string, d *Details, m *ldap.Entry) error {
-	// Generate hash as a semi-unique ID placeholder
+	// Generate hash as a probably-unique ID placeholder
 	h := fnv.New64a()
 	fmt.Fprintf(h, m.DN)
 	d.ID = h.Sum64()

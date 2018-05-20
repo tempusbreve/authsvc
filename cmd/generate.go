@@ -1,4 +1,4 @@
-package main
+package cmd // import "breve.us/authsvc/cmd"
 
 import (
 	"encoding/json"

@@ -123,6 +123,7 @@ func (u *Registry) SaveToJSON(w io.Writer) error {
 // bcrypt to verify password against the password field in the user
 // details
 func (u *Registry) BcryptChecker() common.PasswordChecker {
+
 	return &bchecker{r: u}
 }
 

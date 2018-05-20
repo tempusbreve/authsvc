@@ -5,10 +5,12 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -43,16 +45,14 @@ const (
 
 // Options encapsulates OAuth Handler options.
 type Options struct {
-	TokenTTL   time.Duration
-	GrantTTL   time.Duration
-	Cache      store.Cache
-	TokenCache *TokenCache
-	Clients    *client.Registry
-	Users      *user.Registry
+	TokenTTL time.Duration
+	GrantTTL time.Duration
+	CacheDir string
+	Users    *user.Registry
 }
 
 // RegisterAPI returns a router that handles OAuth routes.
-func (h *Handler) RegisterAPI(root string) http.Handler {
+func (h *OAuthHandler) RegisterAPI(root string) http.Handler {
 	mx := mux.NewRouter()
 	mx.Path(path.Join(root, "authorize")).HandlerFunc(h.handleAuthorize).Methods("GET")
 	mx.Path(path.Join(root, "approve")).HandlerFunc(h.handleApprove).Methods("GET")
@@ -62,7 +62,7 @@ func (h *Handler) RegisterAPI(root string) http.Handler {
 }
 
 // NewHandler creates and initializes a new OAuthHandler
-func NewHandler(options *Options) *Handler {
+func NewHandler(options *Options) (*OAuthHandler, error) {
 	if options == nil {
 		options = &Options{}
 	}
@@ -72,31 +72,71 @@ func NewHandler(options *Options) *Handler {
 	if options.GrantTTL == 0 {
 		options.GrantTTL = 14 * 24 * time.Hour
 	}
-	if options.Cache == nil {
-		options.Cache = store.NewMemoryCache()
+
+	var (
+		cache store.Cache
+		tok   *tokenCache
+	)
+
+	cr := client.NewRegistry(store.NewMemoryCache())
+
+	if validDir(options.CacheDir) {
+		var (
+			err    error
+			cc, tc store.Cache
+			fd     io.ReadCloser
+		)
+		if cache, err = store.NewBoltDBCache(path.Join(options.CacheDir, "transient.db"), "cache"); err != nil {
+			return nil, err
+		}
+		if cc, err = store.NewBoltDBCache(path.Join(options.CacheDir, "tokens.db"), "clients"); err != nil {
+			return nil, err
+		}
+		if tc, err = store.NewBoltDBCache(path.Join(options.CacheDir, "tokens.db"), "tokens"); err != nil {
+			return nil, err
+		}
+		tok = newTokenCache(cc, tc)
+
+		if fd, err = os.Open(path.Join(options.CacheDir, "clients.json")); err != nil {
+			return nil, err
+		}
+		defer func() { _ = fd.Close() }()
+		if err = cr.LoadFromJSON(fd); err != nil {
+			return nil, err
+		}
+	} else {
+		cache = store.NewMemoryCache()
+		tok = newTokenCache(store.NewMemoryCache(), store.NewMemoryCache())
 	}
-	if options.TokenCache == nil {
-		options.TokenCache = NewTokenCache(store.NewMemoryCache(), store.NewMemoryCache())
-	}
-	return &Handler{opts: options}
+
+	return &OAuthHandler{
+		opts:    options,
+		cache:   cache,
+		tokens:  tok,
+		clients: cr,
+		checker: newTokenRequestChecker(tok, options.Users),
+	}, nil
 }
 
-// Handler provides OAuth2 capabilities.
-type Handler struct {
-	opts *Options
+// OAuthHandler provides OAuth2 capabilities.
+type OAuthHandler struct {
+	opts    *Options
+	cache   store.Cache
+	tokens  *tokenCache
+	clients *client.Registry
+	checker common.RequestChecker
 }
 
 // Authorized returns the authorized scopes for a request, or an error
 // if the request does not have sufficient authorization.
-func (h *Handler) Authorized(r *http.Request) ([]string, error) {
-	c := NewRequestChecker(h.opts.TokenCache, h.opts.Users)
-	if c.IsAuthenticated(r) != "" {
+func (h *OAuthHandler) Authorized(r *http.Request) ([]string, error) {
+	if h.checker.IsAuthenticated(r) != "" {
 		return []string{ScopeAll}, nil
 	}
 	return nil, ErrNotAuthorized
 }
 
-func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthHandler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		common.JSONStatusResponse(http.StatusBadRequest, w, err.Error())
 		return
@@ -107,11 +147,11 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		common.JSONStatusResponse(http.StatusForbidden, w, err.Error())
 		return
 	}
-	if !h.opts.Clients.VerifyClient(a.ClientID) {
+	if !h.clients.VerifyClient(a.ClientID) {
 		common.JSONStatusResponse(http.StatusForbidden, w, "invalid client id")
 		return
 	}
-	if !h.opts.Clients.VerifyRedirect(a.ClientID, a.RedirectURI) {
+	if !h.clients.VerifyRedirect(a.ClientID, a.RedirectURI) {
 		common.JSONStatusResponse(http.StatusForbidden, w, "invalid client redirect")
 		return
 	}
@@ -120,7 +160,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	a.serveForm(w)
 }
 
-func (h *Handler) handleApprove(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthHandler) handleApprove(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		common.JSONStatusResponse(http.StatusBadRequest, w, err.Error())
 		return
@@ -146,7 +186,7 @@ func (h *Handler) handleApprove(w http.ResponseWriter, r *http.Request) {
 	common.Redirect(w, r, a.RedirectURI, map[string]string{"code": code, "state": a.State})
 }
 
-func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthHandler) handleToken(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		common.JSONStatusResponse(http.StatusBadRequest, w, err.Error())
 		return
@@ -164,7 +204,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.opts.Clients.VerifyClient(creds.ID) {
+	if !h.clients.VerifyClient(creds.ID) {
 		common.JSONStatusResponse(http.StatusForbidden, w, "invalid client id")
 		return
 	}
@@ -175,7 +215,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 			common.JSONStatusResponse(http.StatusForbidden, w, "mismatching client ids")
 			return
 		}
-		switch err := h.opts.Cache.Delete(t.ID); err {
+		switch err := h.cache.Delete(t.ID); err {
 		case nil, store.ErrNotFound:
 		default:
 			panic(err)
@@ -189,7 +229,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleDefault(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthHandler) handleDefault(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		common.JSONStatusResponse(http.StatusBadRequest, w, err.Error())
 		return
@@ -204,26 +244,26 @@ func (h *Handler) handleDefault(w http.ResponseWriter, r *http.Request) {
 	common.JSONResponse(w, obj)
 }
 
-func (h *Handler) addClient(tok string, username string) {
+func (h *OAuthHandler) addClient(tok string, username string) {
 	expire := time.Now().Add(h.opts.GrantTTL)
-	if err := h.opts.TokenCache.PutUntil(expire, username, tok); err != nil {
+	if err := h.tokens.PutUntil(expire, username, tok); err != nil {
 		panic(err)
 	}
 }
 
-func (h *Handler) addToCache(a *authorize) string {
+func (h *OAuthHandler) addToCache(a *authorize) string {
 	if a.ID == "" {
 		a.ID = generateRandomString()
 	}
 	expire := time.Now().Add(h.opts.TokenTTL)
-	if err := h.opts.Cache.PutUntil(expire, a.ID, a); err != nil {
+	if err := h.cache.PutUntil(expire, a.ID, a); err != nil {
 		panic(err)
 	}
 	return a.ID
 }
 
-func (h *Handler) checkCode(code string) (*authorize, bool) {
-	switch v, err := h.opts.Cache.Get(code); err {
+func (h *OAuthHandler) checkCode(code string) (*authorize, bool) {
+	switch v, err := h.cache.Get(code); err {
 	case nil:
 		a, ok := v.(*authorize)
 		return a, ok
@@ -231,6 +271,17 @@ func (h *Handler) checkCode(code string) (*authorize, bool) {
 		log.Printf("error checkCode(%q): %v", code, err)
 		return nil, false
 	}
+}
+
+func validDir(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	s, err := os.Stat(dir)
+	if err != nil {
+		return false
+	}
+	return s.IsDir()
 }
 
 func generateRandomString() string { return fmt.Sprintf("%X", rand.Int63()) }

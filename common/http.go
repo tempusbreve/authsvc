@@ -8,6 +8,11 @@ import (
 	"net/url"
 )
 
+// Middleware describes common middleware
+type Middleware interface {
+	ServeHTTP(http.ResponseWriter, *http.Request, http.HandlerFunc)
+}
+
 // QueryParamKeys gets the keys from a url.Values collection.
 func QueryParamKeys(v url.Values) []string {
 	var keys []string

@@ -4,9 +4,10 @@ set -e
 
 tags=${BUILD_TAGS:--tags debug}
 appver=${VERSION:-0.0.1}
-artifact=${ARTIFACT:-api}
 
 export CGO_ENABLED=0
 
 go clean   ./...
-go build   ${tags} -ldflags "-X main.appVersion=${appver}" -o ${artifact} ./cmd/api
+go build   ${tags} -ldflags "-X main.appVersion=${appver}"  ./cmd/api
+go build   ${tags} -ldflags "-X main.appVersion=${appver}"  ./cmd/authserver
+go build   ${tags} -ldflags "-X main.appVersion=${appver}"  ./cmd/userserver

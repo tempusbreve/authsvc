@@ -7,34 +7,25 @@ import (
 	"breve.us/authsvc/store"
 )
 
-// Errors
 var (
-	ErrExpectStringValue = errors.New("TokenCache expects the value to be a string")
-	ErrExpectStringSlice = errors.New("TokenCache expects the value list to be a []string")
+	errExpectString = errors.New("tokenCache expects the value to be a string")
+	errExpectSlice  = errors.New("tokenCache expects the value list to be a []string")
 )
 
-// NewTokenCache creates a new TokenCache from the provided store.Cache's
-// representing client tokens, and token clients.
-func NewTokenCache(clients store.Cache, tokens store.Cache) *TokenCache {
-	return &TokenCache{clienttokens: clients, tokenclients: tokens}
+func newTokenCache(clients store.Cache, tokens store.Cache) *tokenCache {
+	return &tokenCache{clienttokens: clients, tokenclients: tokens}
 }
 
-// TokenCache provides a forward/backward lookup cache for clients and
-// tokens.
-//
-// There is an n->1 relationship between tokens and client id, so this
-// cache abstracts managing the lookup and expiration of tokens per
-// client id.
-type TokenCache struct {
+type tokenCache struct {
 	clienttokens store.Cache
 	tokenclients store.Cache
 }
 
 // Put expects value to be a string token.
-func (c *TokenCache) Put(key string, value interface{}) error {
+func (c *tokenCache) Put(key string, value interface{}) error {
 	token, ok := value.(string)
 	if !ok {
-		return ErrExpectStringValue
+		return errExpectString
 	}
 	if err := c.addToken(key, token); err != nil {
 		return err
@@ -46,10 +37,10 @@ func (c *TokenCache) Put(key string, value interface{}) error {
 }
 
 // PutUntil expects value to be a string token.
-func (c *TokenCache) PutUntil(time time.Time, key string, value interface{}) error {
+func (c *tokenCache) PutUntil(time time.Time, key string, value interface{}) error {
 	token, ok := value.(string)
 	if !ok {
-		return ErrExpectStringValue
+		return errExpectString
 	}
 	if err := c.addToken(key, token); err != nil {
 		return err
@@ -61,7 +52,7 @@ func (c *TokenCache) PutUntil(time time.Time, key string, value interface{}) err
 }
 
 // Get expects to be given a token, and to return a client id.
-func (c *TokenCache) Get(token string) (interface{}, error) {
+func (c *tokenCache) Get(token string) (interface{}, error) {
 	v, err := c.tokenclients.Get(token)
 	id, ok := v.(string)
 	switch err {
@@ -75,13 +66,13 @@ func (c *TokenCache) Get(token string) (interface{}, error) {
 		return v, err
 	}
 	if !ok {
-		return v, ErrExpectStringValue
+		return v, errExpectString
 	}
 	return id, nil
 }
 
 // Delete removes token from the cache.
-func (c *TokenCache) Delete(token string) error {
+func (c *tokenCache) Delete(token string) error {
 	id, err := c.getIDByToken(token)
 	if err != nil {
 		return err
@@ -90,7 +81,7 @@ func (c *TokenCache) Delete(token string) error {
 }
 
 // getIDByToken returns client ID that correlates to the token.
-func (c *TokenCache) getIDByToken(tok string) (string, error) {
+func (c *tokenCache) getIDByToken(tok string) (string, error) {
 	v, err := c.tokenclients.Get(tok)
 	if err != nil {
 		return "", err
@@ -98,11 +89,11 @@ func (c *TokenCache) getIDByToken(tok string) (string, error) {
 	if id, ok := v.(string); ok {
 		return id, nil
 	}
-	return "", ErrExpectStringValue
+	return "", errExpectString
 }
 
 // GetTokenByID returns the token associated with a client ID.
-func (c *TokenCache) getTokensByID(id string) ([]string, error) {
+func (c *tokenCache) getTokensByID(id string) ([]string, error) {
 	v, err := c.Get(id)
 	if err != nil {
 		return nil, err
@@ -110,10 +101,10 @@ func (c *TokenCache) getTokensByID(id string) ([]string, error) {
 	if list, ok := v.([]string); ok {
 		return list, nil
 	}
-	return nil, ErrExpectStringSlice
+	return nil, errExpectSlice
 }
 
-func (c *TokenCache) addToken(id string, token string) error {
+func (c *tokenCache) addToken(id string, token string) error {
 	toklist, err := c.getTokensByID(id)
 	switch err {
 	case nil, store.ErrNotFound:
@@ -124,7 +115,7 @@ func (c *TokenCache) addToken(id string, token string) error {
 	return c.clienttokens.Put(id, toklist)
 }
 
-func (c *TokenCache) removeToken(id string, token string) error {
+func (c *tokenCache) removeToken(id string, token string) error {
 	_ = c.tokenclients.Delete(token)
 	toklist, err := c.getTokensByID(id)
 	if err != nil {

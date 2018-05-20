@@ -1,4 +1,4 @@
-package main
+package cmd // import "breve.us/authsvc/cmd"
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/urfave/cli"
 
+	"breve.us/authsvc/store"
 	"breve.us/authsvc/user"
 )
 
@@ -14,6 +15,7 @@ func newUserCmd() cli.Command {
 		Name: "user",
 		Subcommands: cli.Commands{
 			newGetUserCmd(),
+			newCheckPasswordCmd(),
 			newListUsersCmd(),
 		},
 	}
@@ -28,18 +30,18 @@ func newGetUserCmd() cli.Command {
 			ldapHostFlag,
 			ldapPortFlag,
 			ldapBaseDNFlag,
-			ldapUserFlag,
-			ldapPasswordFlag,
+			ldapAdminUserFlag,
+			ldapAdminPassFlag,
 		},
 	}
 }
 
 func getUser(ctx *cli.Context) error {
-	cache := user.NewLDAPCache(&user.LDAPConfig{
+	cache := user.NewLDAPCache(&store.LDAPConfig{
 		Host:     ctx.String(ldapHost),
 		Port:     ctx.Int(ldapPort),
-		Username: ctx.String(ldapUser),
-		Password: ctx.String(ldapPass),
+		Username: ctx.String(ldapAdminUser),
+		Password: ctx.String(ldapAdminPass),
 		BaseDN:   ctx.String(ldapBaseDN),
 	})
 	uid := ctx.Args().First()
@@ -54,6 +56,46 @@ func getUser(ctx *cli.Context) error {
 	return err
 }
 
+func newCheckPasswordCmd() cli.Command {
+	return cli.Command{
+		Name:    "check",
+		Aliases: []string{"pwd", "c"},
+		Action:  checkPassword,
+		Flags: []cli.Flag{
+			ldapHostFlag,
+			ldapPortFlag,
+			ldapBaseDNFlag,
+			ldapAdminUserFlag,
+			ldapAdminPassFlag,
+		},
+	}
+}
+
+func checkPassword(ctx *cli.Context) error {
+	checker := user.NewLDAPChecker(&store.LDAPConfig{
+		Host:     ctx.String(ldapHost),
+		Port:     ctx.Int(ldapPort),
+		Username: ctx.String(ldapAdminUser),
+		Password: ctx.String(ldapAdminPass),
+		BaseDN:   ctx.String(ldapBaseDN),
+	})
+	a := ctx.Args()
+	if ctx.NArg() < 2 {
+		return errors.New("expecting uid and pwd as parameters")
+	}
+
+	var err error
+
+	uid := a.Get(0)
+	pwd := a.Get(1)
+	if checker.IsAuthenticated(uid, pwd) {
+		_, err = fmt.Fprintf(ctx.App.Writer, "Authenticated!\n")
+		return err
+	}
+	_, err = fmt.Fprintf(ctx.App.ErrWriter, "Not Authenticated\n")
+	return err
+}
+
 func newListUsersCmd() cli.Command {
 	return cli.Command{
 		Name:    "list",
@@ -63,18 +105,18 @@ func newListUsersCmd() cli.Command {
 			ldapHostFlag,
 			ldapPortFlag,
 			ldapBaseDNFlag,
-			ldapUserFlag,
-			ldapPasswordFlag,
+			ldapAdminUserFlag,
+			ldapAdminPassFlag,
 		},
 	}
 }
 
 func listUsers(ctx *cli.Context) error {
-	cfg := &user.LDAPConfig{
+	cfg := &store.LDAPConfig{
 		Host:     ctx.String(ldapHost),
 		Port:     ctx.Int(ldapPort),
-		Username: ctx.String(ldapUser),
-		Password: ctx.String(ldapPass),
+		Username: ctx.String(ldapAdminUser),
+		Password: ctx.String(ldapAdminPass),
 		BaseDN:   ctx.String(ldapBaseDN),
 	}
 	keys, err := user.NewLDAPCache(cfg).Keys()
@@ -86,44 +128,3 @@ func listUsers(ctx *cli.Context) error {
 	}
 	return nil
 }
-
-const (
-	ldapHost   = "ldaphost"
-	ldapPort   = "ldapport"
-	ldapBaseDN = "ldapbase"
-	ldapUser   = "ldapuser"
-	ldapPass   = "ldappass"
-)
-
-var (
-	ldapHostFlag = cli.StringFlag{
-		Name:   ldapHost,
-		Usage:  "hostname for LDAP connection",
-		EnvVar: "LDAP_HOST",
-		Value:  "localhost",
-	}
-	ldapPortFlag = cli.IntFlag{
-		Name:   ldapPort,
-		Usage:  "port for LDAP connection",
-		EnvVar: "LDAP_PORT",
-		Value:  389,
-	}
-	ldapBaseDNFlag = cli.StringFlag{
-		Name:   ldapBaseDN,
-		Usage:  "base DN for LDAP connection",
-		EnvVar: "LDAP_BASE_DN",
-		Value:  "dc=example,dc=org",
-	}
-	ldapUserFlag = cli.StringFlag{
-		Name:   ldapUser,
-		Usage:  "username for LDAP connection",
-		EnvVar: "LDAP_USER",
-		Value:  "cn=admin,dc=example,dc=org",
-	}
-	ldapPasswordFlag = cli.StringFlag{
-		Name:   ldapPass,
-		Usage:  "password for LDAP connection",
-		EnvVar: "LDAP_PASS",
-		Value:  "",
-	}
-)

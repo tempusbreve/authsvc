@@ -4,12 +4,15 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/gorilla/securecookie"
+
 	"breve.us/authsvc/common"
 	"breve.us/authsvc/user"
-	"github.com/gorilla/securecookie"
 )
 
-func cookieRequestChecker(sc *securecookie.SecureCookie, users *user.Registry) common.RequestChecker {
+// NewSecureCookieChecker verifies authentication tokens on requests according to secure cookies
+func NewSecureCookieChecker(provider common.KeyProvider, users *user.Registry) common.RequestChecker {
+	sc := securecookie.New(provider.Hash(), provider.Block())
 	return &cookieChecker{sc: sc, users: users}
 }
 

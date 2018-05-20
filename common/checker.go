@@ -66,7 +66,7 @@ type passwordChecker struct {
 }
 
 func (c *passwordChecker) IsAuthenticated(username, password string) bool {
-	log.Printf("PasswordCheckers.IsAuthenticated(%q, %q)", username, password)
+	log.Printf("PasswordCheckers.IsAuthenticated(%q, %q)", username, "******")
 	for _, cc := range c.checkers {
 		if cc.IsAuthenticated(username, password) {
 			return true
