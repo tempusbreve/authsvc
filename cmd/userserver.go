@@ -15,6 +15,7 @@ import (
 	"breve.us/authsvc/authentication"
 	"breve.us/authsvc/common"
 	"breve.us/authsvc/store"
+	"breve.us/authsvc/user"
 )
 
 // NewUserServerApp creates a command line app
@@ -29,6 +30,8 @@ func NewUserServerApp(version string) *cli.App {
 		debugFlag,
 		corsOriginsFlag,
 		publicHomeFlag,
+		hashFlag,
+		blockFlag,
 		loginPathFlag,
 		ldapHostFlag,
 		ldapPortFlag,
@@ -45,25 +48,18 @@ func userServer(ctx *cli.Context) error {
 	log.SetPrefix(logPrefixUser)
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 
-	var (
-		exposedRoutes []string              // TODO
-		checker       common.RequestChecker //TODO
-	)
-
-	options := &authentication.Options{
-		Realm:          realm,
-		PublicRoots:    exposedRoutes,
-		LoginPath:      ctx.String(loginPath),
-		RequestChecker: checker,
-	}
-
-	_ = &store.LDAPConfig{
+	ldapCfg := &store.LDAPConfig{
 		Host:     ctx.String(ldapHost),
 		Port:     ctx.Int(ldapPort),
 		UseTLS:   ctx.Bool(ldapTLS),
 		Username: ctx.String(ldapAdminUser),
 		Password: ctx.String(ldapAdminPass),
 		BaseDN:   ctx.String(ldapBaseDN),
+	}
+	userRegistry := user.NewRegistry(user.NewLDAPCache(ldapCfg))
+	provider, err := common.NewKeyProvider(ctx.String(crypthash), ctx.String(cryptblock))
+	if err != nil {
+		return err
 	}
 
 	sec := secure.New(secure.Options{
@@ -90,8 +86,23 @@ func userServer(ctx *cli.Context) error {
 		negroni.NewStatic(http.Dir(ctx.String(publicHome))),
 	)
 
+	authenticationMiddleware := authentication.NewMiddleware(&authentication.Options{
+		Realm:          realm,
+		PublicRoots:    []string{},
+		LoginPath:      ctx.String(loginPath),
+		RequestChecker: authentication.NewSecureCookieChecker(provider, userRegistry),
+	})
+
+	var userRoot = "TODO"
+	options := user.Options{
+		Root:    userRoot,
+		Verbose: false, //TODO
+		Users:   userRegistry,
+	}
+
 	r := mux.NewRouter()
-	_ = n.With(negroni.Handler(authentication.NewMiddleware("TODO", options)))
+	r.PathPrefix(userRoot).Handler(n.With(authenticationMiddleware).With(negroni.Wrap(user.RegisterAPI(options))))
+	r.PathPrefix("/").Handler(n.With(negroni.WrapFunc(defaultHandlerFn)))
 	s := &http.Server{
 		Addr:           fmt.Sprintf("%s:%d", ctx.String(listenIP), ctx.Int(listenPort)),
 		Handler:        r,

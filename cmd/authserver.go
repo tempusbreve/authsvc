@@ -59,33 +59,23 @@ func authServer(ctx *cli.Context) error {
 		Password: ctx.String(ldapAdminPass),
 		BaseDN:   ctx.String(ldapBaseDN),
 	}
-
-	userRegistry := user.NewRegistry(user.NewLDAPCache(ldapCfg))
-
-	var (
-		err          error
-		provider     common.KeyProvider
-		oauthHandler *authorization.OAuthHandler
-	)
-
-	if provider, err = common.NewKeyProvider(ctx.String(crypthash), ctx.String(cryptblock)); err != nil {
-		return err
-	}
-
-	checker := authentication.NewSecureCookieChecker(provider, userRegistry)
-	exposedRoutes := []string{}
-	options := &authentication.Options{
-		Realm:          realm,
-		PublicRoots:    exposedRoutes,
-		LoginPath:      ctx.String(loginPath),
-		RequestChecker: checker,
-	}
-
-	if oauthHandler, err = authorization.NewHandler(&authorization.Options{CacheDir: ctx.String(cacheDir), Users: userRegistry}); err != nil {
-		return err
-	}
-
 	pchecker := common.PasswordCheckers(user.NewLDAPChecker(ldapCfg))
+	userRegistry := user.NewRegistry(user.NewLDAPCache(ldapCfg))
+	provider, err := common.NewKeyProvider(ctx.String(crypthash), ctx.String(cryptblock))
+	if err != nil {
+		return err
+	}
+	authenticationMiddleware := authentication.NewMiddleware(&authentication.Options{
+		Realm:          realm,
+		PublicRoots:    []string{},
+		LoginPath:      ctx.String(loginPath),
+		RequestChecker: authentication.NewSecureCookieChecker(provider, userRegistry),
+	})
+
+	oauthHandler, err := authorization.NewHandler(&authorization.Options{CacheDir: ctx.String(cacheDir), Users: userRegistry})
+	if err != nil {
+		return err
+	}
 
 	sec := secure.New(secure.Options{
 		BrowserXssFilter:   true,
@@ -112,12 +102,8 @@ func authServer(ctx *cli.Context) error {
 	)
 
 	r := mux.NewRouter()
-
 	r.PathPrefix(authRoot).Handler(n.With(negroni.Wrap(authentication.LoginHandler(authRoot, pchecker, provider, ctx.Bool(insecure)))))
-
-	a := n.With(authentication.NewMiddleware(authRoot, options))
-	r.PathPrefix(oauthRoot).Handler(a.With(negroni.Wrap(oauthHandler.RegisterAPI(oauthRoot))))
-
+	r.PathPrefix(oauthRoot).Handler(n.With(authenticationMiddleware).With(negroni.Wrap(oauthHandler.RegisterAPI(oauthRoot))))
 	r.PathPrefix("/").Handler(n.With(negroni.WrapFunc(defaultHandlerFn)))
 
 	s := &http.Server{

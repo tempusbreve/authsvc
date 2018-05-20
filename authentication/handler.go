@@ -31,7 +31,7 @@ type Options struct {
 }
 
 // NewMiddleware returns a middlware suitable for authentication.
-func NewMiddleware(root string, config *Options) common.Middleware {
+func NewMiddleware(config *Options) common.Middleware {
 	if config == nil {
 		config = &Options{}
 	}
