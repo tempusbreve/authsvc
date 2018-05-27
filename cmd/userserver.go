@@ -93,7 +93,7 @@ func userServer(ctx *cli.Context) error {
 		RequestChecker: authentication.NewSecureCookieChecker(provider, userRegistry),
 	})
 
-	var userRoot = "TODO"
+	var userRoot = "/api/v4/user/"
 	options := user.Options{
 		Root:    userRoot,
 		Verbose: false, //TODO

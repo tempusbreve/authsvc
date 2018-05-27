@@ -67,7 +67,7 @@ func authServer(ctx *cli.Context) error {
 	}
 	authenticationMiddleware := authentication.NewMiddleware(&authentication.Options{
 		Realm:          realm,
-		PublicRoots:    []string{},
+		PublicRoots:    []string{"/auth/login/"},
 		LoginPath:      ctx.String(loginPath),
 		RequestChecker: authentication.NewSecureCookieChecker(provider, userRegistry),
 	})

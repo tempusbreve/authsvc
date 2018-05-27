@@ -22,6 +22,10 @@ var (
 	loginLifetime = 60 * 60 * 2 // 2 hours
 )
 
+const (
+	realm = "authserver"
+)
+
 // Options provides configuration options to the AuthenticationMiddleware.
 type Options struct {
 	Realm          string
@@ -34,6 +38,12 @@ type Options struct {
 func NewMiddleware(config *Options) common.Middleware {
 	if config == nil {
 		config = &Options{}
+	}
+	if config.Realm == "" {
+		config.Realm = realm
+	}
+	if config.LoginPath == "" {
+		config.LoginPath = loginPath
 	}
 
 	return &middleware{
