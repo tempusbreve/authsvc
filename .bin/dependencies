@@ -16,7 +16,10 @@ trap _trap_exit EXIT
 pushd "${PROJECT_ROOT}" &> /dev/null
 
 
-TEMPLATE='{{ .ImportPath }}{{ range .Imports }}{{ printf "\n-> %s" .}}{{ end }}{{ printf "\n\n" }}'
-FILTER="/^.*vendor.*$/d;/^$/p;\|^.*${PACKAGE}.*$|p;d"
+TEMPLATE='{{ $ip := .ImportPath }}{{ range .Imports }}{{ if true }}{{ printf "\n %q -> %q" $ip .}}{{ end }}{{ end }}{{ printf "\n" }}'
+FILTER="/^$/d;/^.*vendor.*$/d;/^$/p;\|^.*-> \"${PACKAGE}.*$|p;d"
 
+echo 'digraph "breve.us/authsvc" {'
+echo 'node [shape=note];'
 go list -f "${TEMPLATE}" ./... | sed -e "${FILTER}"
+echo '}'

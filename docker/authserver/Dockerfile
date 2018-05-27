@@ -1,12 +1,12 @@
 FROM scratch
 
-LABEL maintainer="John Weldon <johnweldon4@gmail.com>" \
-      company="Tempus Breve Software" \
+LABEL company="Tempus Breve Software" \
+      maintainer="John Weldon <johnweldon4@gmail.com>" \
       description="OAuth2 API that emulates Gitlab"
 
 COPY public /public/
 COPY data /data/
-ADD api api
+ADD authserver authserver
 
 ENV PORT 4884
 ENV PUBLIC_HOME /public
@@ -17,4 +17,4 @@ ENV USERS /data/users.json
 
 EXPOSE 4884
 
-ENTRYPOINT ["/api", "serve"]
+ENTRYPOINT ["/authserver"]
