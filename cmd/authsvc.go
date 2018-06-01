@@ -13,25 +13,28 @@ import (
 	"github.com/urfave/negroni"
 
 	"breve.us/authsvc/authentication"
+	"breve.us/authsvc/authorization"
 	"breve.us/authsvc/common"
 	"breve.us/authsvc/store"
 	"breve.us/authsvc/user"
 )
 
-// NewUserServerApp creates a command line app
-func NewUserServerApp(version string) *cli.App {
+// NewAuthSvcApp creates a command line app
+func NewAuthSvcApp(version string) *cli.App {
 	app := cli.NewApp()
-	app.Usage = "authorization server"
+	app.Usage = "authsvc server"
 	app.Version = version
-	app.Action = userServer
+	app.Action = authSvc
 	app.Flags = []cli.Flag{
 		portFlag,
 		bindFlag,
-		debugFlag,
-		corsOriginsFlag,
 		publicHomeFlag,
+		cacheDirFlag,
+		corsOriginsFlag,
 		hashFlag,
 		blockFlag,
+		debugFlag,
+		insecureFlag,
 		loginPathFlag,
 		ldapHostFlag,
 		ldapPortFlag,
@@ -43,9 +46,9 @@ func NewUserServerApp(version string) *cli.App {
 	return app
 }
 
-func userServer(ctx *cli.Context) error {
+func authSvc(ctx *cli.Context) error {
 	log.SetOutput(ctx.App.Writer)
-	log.SetPrefix(logPrefixUser)
+	log.SetPrefix(logPrefixAuth)
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 
 	ldapCfg := &store.LDAPConfig{
@@ -56,8 +59,24 @@ func userServer(ctx *cli.Context) error {
 		Password: ctx.String(ldapAdminPass),
 		BaseDN:   ctx.String(ldapBaseDN),
 	}
+
+	pchecker := common.PasswordCheckers(user.NewLDAPChecker(ldapCfg))
+
 	userRegistry := user.NewRegistry(user.NewLDAPCache(ldapCfg))
+
 	provider, err := common.NewKeyProvider(ctx.String(crypthash), ctx.String(cryptblock))
+	if err != nil {
+		return err
+	}
+
+	authenticationMiddleware := authentication.NewMiddleware(&authentication.Options{
+		Realm:          realm,
+		PublicRoots:    []string{"/auth/login/"},
+		LoginPath:      ctx.String(loginPath),
+		RequestChecker: authentication.NewSecureCookieChecker(provider, userRegistry),
+	})
+
+	oauthHandler, err := authorization.NewHandler(&authorization.Options{CacheDir: ctx.String(cacheDir), Users: userRegistry})
 	if err != nil {
 		return err
 	}
@@ -86,13 +105,6 @@ func userServer(ctx *cli.Context) error {
 		negroni.NewStatic(http.Dir(ctx.String(publicHome))),
 	)
 
-	authenticationMiddleware := authentication.NewMiddleware(&authentication.Options{
-		Realm:          realm,
-		PublicRoots:    []string{},
-		LoginPath:      ctx.String(loginPath),
-		RequestChecker: authentication.NewSecureCookieChecker(provider, userRegistry),
-	})
-
 	var userRoot = "/api/v4/user/"
 	options := user.Options{
 		Root:    userRoot,
@@ -101,8 +113,11 @@ func userServer(ctx *cli.Context) error {
 	}
 
 	r := mux.NewRouter()
+	r.PathPrefix(authRoot).Handler(n.With(negroni.Wrap(authentication.LoginHandler(authRoot, pchecker, provider, ctx.Bool(insecure)))))
+	r.PathPrefix(oauthRoot).Handler(n.With(authenticationMiddleware).With(negroni.Wrap(oauthHandler.RegisterAPI(oauthRoot))))
 	r.PathPrefix(userRoot).Handler(n.With(authenticationMiddleware).With(negroni.Wrap(user.RegisterAPI(options))))
 	r.PathPrefix("/").Handler(n.With(negroni.WrapFunc(defaultHandlerFn)))
+
 	s := &http.Server{
 		Addr:           fmt.Sprintf("%s:%d", ctx.String(listenIP), ctx.Int(listenPort)),
 		Handler:        r,
@@ -114,4 +129,11 @@ func userServer(ctx *cli.Context) error {
 	log.Printf("%v version %v", ctx.App.Name, ctx.App.Version)
 	log.Printf("listening on %s\n", s.Addr)
 	return s.ListenAndServe()
+}
+
+func defaultHandlerFn(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotFound)
+	if _, err := fmt.Fprintf(w, "no handler"); err != nil {
+		log.Printf("error writing response: %v", err)
+	}
 }

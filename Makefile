@@ -7,11 +7,11 @@ help: ## Display help text.
 clean: ## Clean up build artifacts
 	@echo "cleanup"
 	@go clean ./...
-	@-rm ./authsvc-cli ./authserver ./userserver
+	@-rm -vf ./authsvc-cli ./authsvc
 
 dot: ## Generate DOT graph of internal dependencies
-	@echo "Generate deps.svg"
-	@.bin/dependencies | dot -Tsvg >| deps.svg
+	@echo "Generate package_dependencies.svg"
+	@.bin/dependencies | dot -Tsvg >| docs/package_dependencies.svg
 
 deps: ## Ensure dependencies
 	@echo "ensure dependencies"
@@ -39,13 +39,11 @@ install-hooks: ## Install git pre-push hooks to run verification checks before p
 
 images: ## Build Docker images
 	@echo "build docker images"
-	@cd docker/authserver && $(MAKE) image
-	@cd docker/userserver && $(MAKE) image
+	@cd docker/authsvc && $(MAKE) image
 
 push-images: ## Push Docker images
 	@echo "push docker images"
-	@cd docker/authserver && $(MAKE) push
-	@cd docker/userserver && $(MAKE) push
+	@cd docker/authsvc && $(MAKE) push
 
 
 .PHONY: all help clean deps dot build format lint verify install-hooks images push-images

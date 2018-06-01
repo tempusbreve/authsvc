@@ -10,8 +10,7 @@ import (
 var version = "0.0.1"
 
 func main() {
-	app := cmd.NewUserServerApp(version)
-
+	app := cmd.NewAuthSvcApp(version)
 	if err := app.Run(os.Args); err != nil {
 		log.Fatalf("ERROR: %v", err)
 	}

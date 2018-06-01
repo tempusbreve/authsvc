@@ -9,5 +9,4 @@ export CGO_ENABLED=0
 
 go clean   ./...
 go build   ${tags} -ldflags "-X main.appVersion=${appver}"  ./cmd/authsvc-cli
-go build   ${tags} -ldflags "-X main.appVersion=${appver}"  ./cmd/authserver
-go build   ${tags} -ldflags "-X main.appVersion=${appver}"  ./cmd/userserver
+go build   ${tags} -ldflags "-X main.appVersion=${appver}"  ./cmd/authsvc

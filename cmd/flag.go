@@ -6,7 +6,6 @@ const (
 	realm = "breve.us/authsvc"
 
 	logPrefixAuth = "[authsrv] "
-	logPrefixUser = "[usersrv] "
 
 	listenPort  = "port"
 	listenIP    = "bind"

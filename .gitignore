@@ -15,8 +15,5 @@
 
 .env
 .local*
-deps.svg
-/api
-/authserver
-/userserver
+/authsvc
 /authsvc-cli

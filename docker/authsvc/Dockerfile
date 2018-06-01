@@ -6,7 +6,7 @@ LABEL company="Tempus Breve Software" \
 
 COPY public /public/
 COPY data /data/
-ADD authserver authserver
+ADD authsvc authsvc
 
 ENV PORT 4884
 ENV PUBLIC_HOME /public
@@ -17,4 +17,4 @@ ENV USERS /data/users.json
 
 EXPOSE 4884
 
-ENTRYPOINT ["/authserver"]
+ENTRYPOINT ["/authsvc"]
