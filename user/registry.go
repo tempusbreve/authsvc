@@ -45,9 +45,9 @@ func (d *Details) toFilteredMap() map[string]interface{} {
 	return map[string]interface{}{
 		"id":       d.ID,
 		"username": d.Username,
+		"login":    d.Username,
 		"email":    d.Email,
-		"Name":     d.Name,
-		"State":    d.State,
+		"name":     d.Name,
 	}
 }
 

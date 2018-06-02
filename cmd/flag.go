@@ -83,6 +83,7 @@ var (
 		Name:   loginPath,
 		Usage:  "URL to login page for this application",
 		EnvVar: "LOGIN_PATH",
+		Value:  "/auth/login/",
 	}
 
 	ldapHostFlag = cli.StringFlag{

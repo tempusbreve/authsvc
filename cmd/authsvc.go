@@ -69,17 +69,19 @@ func authSvc(ctx *cli.Context) error {
 		return err
 	}
 
-	authenticationMiddleware := authentication.NewMiddleware(&authentication.Options{
-		Realm:          realm,
-		PublicRoots:    []string{"/auth/login/"},
-		LoginPath:      ctx.String(loginPath),
-		RequestChecker: authentication.NewSecureCookieChecker(provider, userRegistry),
-	})
-
 	oauthHandler, err := authorization.NewHandler(&authorization.Options{CacheDir: ctx.String(cacheDir), Users: userRegistry})
 	if err != nil {
 		return err
 	}
+
+	authenticationMiddleware := authentication.NewMiddleware(&authentication.Options{
+		Realm:       realm,
+		PublicRoots: []string{"/auth/login/", "/oauth/token"},
+		LoginPath:   ctx.String(loginPath),
+		RequestChecker: common.RequestCheckers(
+			oauthHandler,
+			authentication.NewSecureCookieChecker(provider, userRegistry)),
+	})
 
 	sec := secure.New(secure.Options{
 		BrowserXssFilter:   true,
@@ -96,16 +98,16 @@ func authSvc(ctx *cli.Context) error {
 
 		Debug: ctx.Bool(debug),
 	})
-
+	staticHome := ctx.String(publicHome)
 	n := negroni.New(
 		negroni.NewRecovery(),
 		common.NewDebugMiddleware(ctx.App.ErrWriter, ctx.Bool(debug)),
 		negroni.HandlerFunc(sec.HandlerFuncWithNext),
 		negroni.HandlerFunc(c.ServeHTTP),
-		negroni.NewStatic(http.Dir(ctx.String(publicHome))),
+		negroni.NewStatic(http.Dir(staticHome)),
 	)
 
-	var userRoot = "/api/v4/user/"
+	var userRoot = "/api/v4/user"
 	options := user.Options{
 		Root:    userRoot,
 		Verbose: false, //TODO
@@ -127,7 +129,7 @@ func authSvc(ctx *cli.Context) error {
 	}
 
 	log.Printf("%v version %v", ctx.App.Name, ctx.App.Version)
-	log.Printf("listening on %s\n", s.Addr)
+	log.Printf("listening on %s\nstatic content from %q", s.Addr, staticHome)
 	return s.ListenAndServe()
 }
 

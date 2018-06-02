@@ -127,6 +127,9 @@ type OAuthHandler struct {
 	checker common.RequestChecker
 }
 
+// IsAuthenticated checks the request for a Bearer token
+func (h *OAuthHandler) IsAuthenticated(r *http.Request) string { return h.checker.IsAuthenticated(r) }
+
 // Authorized returns the authorized scopes for a request, or an error
 // if the request does not have sufficient authorization.
 func (h *OAuthHandler) Authorized(r *http.Request) ([]string, error) {
