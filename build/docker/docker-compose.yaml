@@ -1,0 +1,25 @@
+version: '3.1'
+
+services:
+  authsvc:
+    image: ${IMAGE:-tempusbreve/authsvc}
+    restart: always
+    environment:
+      DEBUG: ${DEBUG:-}
+      BIND_IP: ${BIND_IP:-0.0.0.0}
+      CRYPT_HASH: ${CRYPT_HASH:-}
+      CRYPT_BLOCK: ${CRYPT_BLOCK:-}
+      CACHE_DIR: ${CACHE_DIR:-/data}
+      PUBLIC_HOME: ${PUBLIC_HOME:-/public}
+      STORAGE: ${STORAGE:-boltdb}
+      LDAP_HOST: ${LDAP_HOST:-localhost}
+      LDAP_PORT: ${LDAP_PORT:-389}
+      LDAP_TLS: ${LDAP_TLS:-false}
+      LDAP_ADMIN_USER: ${LDAP_ADMIN_USER:-cn=admin,dc=example,dc.com}
+      LDAP_ADMIN_PASS: ${LDAP_ADMIN_PASS:-password}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=example,dc=com}
+    ports:
+      - "4884:4884"
+    volumes:
+      - ./data:/data
+
