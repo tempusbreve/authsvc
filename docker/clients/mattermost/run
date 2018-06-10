@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-
-. config.sh
-
-pull-image
-kill-container
-start-container
-

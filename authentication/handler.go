@@ -2,7 +2,6 @@ package authentication // import "breve.us/authsvc/authentication"
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -106,7 +105,7 @@ func (m *middleware) unauthorized(w http.ResponseWriter, originalURL fmt.Stringe
 }
 
 // LoginHandler returns a router that handles the login and logout routes.
-func LoginHandler(authroot string, checker common.PasswordChecker, provider common.KeyProvider, insecure bool) http.Handler {
+func LoginHandler(authroot string, checker common.PasswordChecker, provider common.KeyProvider, insecure bool) *mux.Router {
 	sc := securecookie.New(provider.Hash(), provider.Block())
 	h := &loginHandler{root: authroot, checker: checker, cookie: sc, insecure: insecure}
 
@@ -138,7 +137,7 @@ func (m *loginHandler) loginPOST(w http.ResponseWriter, r *http.Request) {
 		}
 		m.setLoginCookie(username, w)
 		returnURL, err := url.PathUnescape(r.Form.Get(redirectParam))
-		if err != nil {
+		if err != nil || returnURL == "" {
 			returnURL = "/"
 		}
 		common.Redirect(w, r, returnURL, nil)
@@ -175,7 +174,6 @@ func (m *loginHandler) setLoginCookie(username string, w http.ResponseWriter) {
 			HttpOnly: true,
 		})
 	default:
-		log.Printf("error encoding the cookie %q with username %q: %v", cookieName, username, err)
 		common.JSONStatusResponse(http.StatusInternalServerError, w, "error logging in")
 	}
 }

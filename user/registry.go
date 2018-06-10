@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -43,7 +42,7 @@ type Details struct {
 
 func (d *Details) toFilteredMap() map[string]interface{} {
 	return map[string]interface{}{
-		"id":       d.ID,
+		"id":       int64(d.ID),
 		"username": d.Username,
 		"login":    d.Username,
 		"email":    d.Email,
@@ -136,7 +135,7 @@ type bchecker struct {
 // stored password is not empty, and that the supplied password matches
 // the stored password when compared with a bcrypt algorithm
 func (b *bchecker) IsAuthenticated(username, password string) bool {
-	log.Printf("Bcrypt PasswordChecker.IsAuthenticated(%q, %q)", username, password)
+	// TODO: ?
 	if username == "" || password == "" {
 		return false
 	}
@@ -172,7 +171,7 @@ type pchecker struct {
 // stored password is not empty, and that the supplied password matches
 // the stored password when compared as plain text strings
 func (p *pchecker) IsAuthenticated(username, password string) bool {
-	log.Printf("Plain PasswordChecker.IsAuthenticated(%q, %q)", username, password)
+	// TODO: ?
 	if username == "" || password == "" {
 		return false
 	}

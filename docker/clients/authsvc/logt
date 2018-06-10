@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-
-. config.sh
-
-log-tail-container ${1:-40}
-

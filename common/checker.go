@@ -2,7 +2,6 @@ package common // import "breve.us/authsvc/common"
 
 import (
 	"context"
-	"log"
 	"net/http"
 )
 
@@ -31,10 +30,8 @@ type requestChecker struct {
 }
 
 func (c *requestChecker) IsAuthenticated(r *http.Request) string {
-	log.Printf("RequestCheckers.IsAuthenticated()")
 	for _, cc := range c.checkers {
 		if username := cc.IsAuthenticated(r); username != "" {
-			log.Printf("RequestCheckers.IsAuthenticated() GOOD: %q", username)
 			return username
 		}
 	}
@@ -66,7 +63,6 @@ type passwordChecker struct {
 }
 
 func (c *passwordChecker) IsAuthenticated(username, password string) bool {
-	log.Printf("PasswordCheckers.IsAuthenticated(%q, %q)", username, "******")
 	for _, cc := range c.checkers {
 		if cc.IsAuthenticated(username, password) {
 			return true

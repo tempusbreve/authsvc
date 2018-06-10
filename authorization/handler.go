@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -15,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alecthomas/template"
 	"github.com/gorilla/mux"
 
 	"breve.us/authsvc/client"
@@ -52,12 +50,11 @@ type Options struct {
 }
 
 // RegisterAPI returns a router that handles OAuth routes.
-func (h *OAuthHandler) RegisterAPI(root string) http.Handler {
+func (h *OAuthHandler) RegisterAPI(root string) *mux.Router {
 	mx := mux.NewRouter()
 	mx.Path(path.Join(root, "authorize")).HandlerFunc(h.handleAuthorize).Methods("GET")
-	mx.Path(path.Join(root, "approve")).HandlerFunc(h.handleApprove).Methods("GET")
+	mx.Path(path.Join(root, "approve")).HandlerFunc(h.handleApprove).Methods("POST")
 	mx.Path(path.Join(root, "token")).HandlerFunc(h.handleToken).Methods("POST")
-	mx.PathPrefix(root).HandlerFunc(h.handleDefault).Methods("GET")
 	return mx
 }
 
@@ -160,7 +157,7 @@ func (h *OAuthHandler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.addToCache(a)
-	a.serveForm(w)
+	common.Redirect(w, r, "/oauth/ask", map[string]string{"id": a.ID, "app": a.Application})
 }
 
 func (h *OAuthHandler) handleApprove(w http.ResponseWriter, r *http.Request) {
@@ -232,21 +229,6 @@ func (h *OAuthHandler) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *OAuthHandler) handleDefault(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		common.JSONStatusResponse(http.StatusBadRequest, w, err.Error())
-		return
-	}
-
-	obj := struct {
-		URL       string
-		QueryKeys []string
-		Values    interface{}
-	}{URL: r.URL.String(), QueryKeys: common.QueryParamKeys(r.Form), Values: r.Form}
-
-	common.JSONResponse(w, obj)
-}
-
 func (h *OAuthHandler) addClient(tok string, username string) {
 	expire := time.Now().Add(h.opts.GrantTTL)
 	if err := h.tokens.PutUntil(expire, username, tok); err != nil {
@@ -271,7 +253,6 @@ func (h *OAuthHandler) checkCode(code string) (*authorize, bool) {
 		a, ok := v.(*authorize)
 		return a, ok
 	default:
-		log.Printf("error checkCode(%q): %v", code, err)
 		return nil, false
 	}
 }
@@ -358,28 +339,3 @@ func (a *authorize) valid() error {
 	}
 	return nil
 }
-
-func (a *authorize) serveForm(w http.ResponseWriter) {
-	if err := authorizeForm.Execute(w, a); err != nil {
-		common.JSONStatusResponse(http.StatusInternalServerError, w, nil)
-	}
-}
-
-var authorizeForm = template.Must(template.New("authorize").Parse(`<!DOCTYPE html>
-<html>
-  <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Login</title>
-  </head>
-  <body>
-    <h3>Allow {{ .Application }}?</h3>
-    <form action="/oauth/approve" method="get">
-      <div>
-        <input type="hidden" name="corr" value="{{ .ID }}" />
-        <input type="submit" name="approve" value="Approve"></input>
-        <input type="submit" name="deny" value="Deny"></input>
-      </div>
-    </form>
-  </body>
-</html>
-`))

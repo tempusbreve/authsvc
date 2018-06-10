@@ -13,7 +13,7 @@ There is a git pre-push hook for running some basic sanity tests before pushing.
 Please run `make install-hooks` to install the hook.
 
 Typical deployment of this service will be done with docker.
-The Dockerfile and related files are in [`docker/api/`](docker/api/).
+The Dockerfile and related files are in [`build/docker/authsvc/`](build/docker/authsvc/).
 You can build the docker images with `make images`, and push them to the docker repo with `make push-images`
 
 
@@ -27,7 +27,7 @@ For example you could use:
   export PORT=${PORT:-4884}
   export VERBOSE=${VERBOSE:-true}
   export DATA_HOME="${DATA_HOME:-.local/data}"
-  export PUBLIC_HOME="${PUBLIC_HOME:-docker/api/public}"
+  export PUBLIC_HOME="${PUBLIC_HOME:-build/docker/authsvc/public}"
   # The following are randomly generated seed values; you should change them.
   export SEED_BLOCK="${SEED_BLOCK:-yTVbPPsuijznJ0G05+EgXpoBTuT64FwpHS/X2CThfow=}"
   export SEED_HASH="${SEED_HASH:-uB0qbJMdJZn2E0jdjC8gPnaxEa/tNLDKMtzb956BzaAg8XlqEsPLCNGi0jhTsa/TDwIYQxQIm8CyEcnU9E4bWw==}"

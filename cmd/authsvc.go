@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -29,6 +30,7 @@ func NewAuthSvcApp(version string) *cli.App {
 		portFlag,
 		bindFlag,
 		publicHomeFlag,
+		templateHomeFlag,
 		cacheDirFlag,
 		corsOriginsFlag,
 		hashFlag,
@@ -76,7 +78,7 @@ func authSvc(ctx *cli.Context) error {
 
 	authenticationMiddleware := authentication.NewMiddleware(&authentication.Options{
 		Realm:       realm,
-		PublicRoots: []string{"/auth/login/", "/oauth/token"},
+		PublicRoots: []string{"/auth/login", "/oauth/token"},
 		LoginPath:   ctx.String(loginPath),
 		RequestChecker: common.RequestCheckers(
 			oauthHandler,
@@ -98,13 +100,15 @@ func authSvc(ctx *cli.Context) error {
 
 		Debug: ctx.Bool(debug),
 	})
-	staticHome := ctx.String(publicHome)
+
+	staticAssets := ctx.String(publicHome)
+	staticHandler := common.NewStaticFileHandler(path.Join(staticAssets, "index.html"))
 	n := negroni.New(
 		negroni.NewRecovery(),
 		common.NewDebugMiddleware(ctx.App.ErrWriter, ctx.Bool(debug)),
 		negroni.HandlerFunc(sec.HandlerFuncWithNext),
 		negroni.HandlerFunc(c.ServeHTTP),
-		negroni.NewStatic(http.Dir(staticHome)),
+		negroni.NewStatic(http.Dir(staticAssets)),
 	)
 
 	var userRoot = "/api/v4/user"
@@ -113,12 +117,24 @@ func authSvc(ctx *cli.Context) error {
 		Verbose: false, //TODO
 		Users:   userRegistry,
 	}
-
 	r := mux.NewRouter()
-	r.PathPrefix(authRoot).Handler(n.With(negroni.Wrap(authentication.LoginHandler(authRoot, pchecker, provider, ctx.Bool(insecure)))))
-	r.PathPrefix(oauthRoot).Handler(n.With(authenticationMiddleware).With(negroni.Wrap(oauthHandler.RegisterAPI(oauthRoot))))
-	r.PathPrefix(userRoot).Handler(n.With(authenticationMiddleware).With(negroni.Wrap(user.RegisterAPI(options))))
-	r.PathPrefix("/").Handler(n.With(negroni.WrapFunc(defaultHandlerFn)))
+
+	loginHandler := authentication.LoginHandler(authRoot, pchecker, provider, ctx.Bool(insecure))
+	r.PathPrefix(authRoot).Handler(n.With(negroni.Wrap(loginHandler)))
+
+	oauthAPIHandler := oauthHandler.RegisterAPI(oauthRoot)
+	r.PathPrefix(oauthRoot).Handler(n.With(authenticationMiddleware, negroni.Wrap(oauthAPIHandler)))
+
+	userAPIHandler := user.RegisterAPI(options)
+	r.PathPrefix(userRoot).Handler(n.With(authenticationMiddleware, negroni.Wrap(userAPIHandler)))
+
+	r.NewRoute().Handler(n.With(negroni.Wrap(staticHandler)))
+
+	for _, rr := range []*mux.Router{r, loginHandler, oauthAPIHandler, userAPIHandler} {
+		if err = rr.Walk(fallbackOn(staticHandler)); err != nil {
+			return err
+		}
+	}
 
 	s := &http.Server{
 		Addr:           fmt.Sprintf("%s:%d", ctx.String(listenIP), ctx.Int(listenPort)),
@@ -129,13 +145,14 @@ func authSvc(ctx *cli.Context) error {
 	}
 
 	log.Printf("%v version %v", ctx.App.Name, ctx.App.Version)
-	log.Printf("listening on %s\nstatic content from %q", s.Addr, staticHome)
+	log.Printf("listening on %s\nstatic content from %q", s.Addr, staticAssets)
 	return s.ListenAndServe()
 }
 
-func defaultHandlerFn(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotFound)
-	if _, err := fmt.Fprintf(w, "no handler"); err != nil {
-		log.Printf("error writing response: %v", err)
+func fallbackOn(h http.Handler) func(*mux.Route, *mux.Router, []*mux.Route) error {
+	return func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		router.NotFoundHandler = h
+		router.MethodNotAllowedHandler = h
+		return nil
 	}
 }

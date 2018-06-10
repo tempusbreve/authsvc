@@ -7,16 +7,17 @@ const (
 
 	logPrefixAuth = "[authsrv] "
 
-	listenPort  = "port"
-	listenIP    = "bind"
-	debug       = "debug"
-	corsOrigins = "origins"
-	insecure    = "insecure"
-	publicHome  = "public"
-	crypthash   = "hash"
-	cryptblock  = "block"
-	cacheDir    = "cache"
-	loginPath   = "login"
+	listenPort   = "port"
+	listenIP     = "bind"
+	debug        = "debug"
+	corsOrigins  = "origins"
+	insecure     = "insecure"
+	publicHome   = "public"
+	templateHome = "templates"
+	crypthash    = "hash"
+	cryptblock   = "block"
+	cacheDir     = "cache"
+	loginPath    = "login"
 
 	ldapHost      = "ldapHost"
 	ldapPort      = "ldapPort"
@@ -63,6 +64,12 @@ var (
 		Usage:  "path to public folder",
 		EnvVar: "PUBLIC_HOME",
 		Value:  "public",
+	}
+	templateHomeFlag = cli.StringFlag{
+		Name:   templateHome,
+		Usage:  "path to templates folder",
+		EnvVar: "TEMPLATE_HOME",
+		Value:  "templates",
 	}
 	hashFlag = cli.StringFlag{
 		Name:   crypthash,

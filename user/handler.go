@@ -17,7 +17,7 @@ type Options struct {
 }
 
 // RegisterAPI returns a router for the api.
-func RegisterAPI(opts Options) http.Handler {
+func RegisterAPI(opts Options) *mux.Router {
 	a := &handler{opts: opts}
 	mx := mux.NewRouter()
 	mx.Path(opts.Root).HandlerFunc(a.handleUser).Methods("GET")

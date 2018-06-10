@@ -26,10 +26,6 @@
 
 
 [[constraint]]
-  branch = "master"
-  name = "github.com/alecthomas/template"
-
-[[constraint]]
   name = "github.com/urfave/negroni"
   version = "0.3.0"
 

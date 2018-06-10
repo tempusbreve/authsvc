@@ -7,7 +7,8 @@ help: ## Display help text.
 clean: ## Clean up build artifacts
 	@echo "cleanup"
 	@go clean ./...
-	@-rm -vf ./authsvc-cli ./authsvc
+	@-rm -vf ./authsvc-cli ./authsvc ./web/app/build
+	@cd build/docker/authsvc && $(MAKE) clean
 
 dot: ## Generate DOT graph of internal dependencies
 	@echo "Generate package_dependencies.svg"
@@ -16,6 +17,7 @@ dot: ## Generate DOT graph of internal dependencies
 deps: ## Ensure dependencies
 	@echo "ensure dependencies"
 	@dep ensure
+	@cd web/app && npm install
 
 build: ## Build binaries
 	@echo "build artifacts"
@@ -37,13 +39,17 @@ install-hooks: ## Install git pre-push hooks to run verification checks before p
 	@echo "install git hooks"
 	@.bin/install-pre-push-hook
 
-images: ## Build Docker images
+web: ## Build Web App
+	@echo "build web app"
+	@cd web/app && npm run-script build
+
+images: web ## Build Docker images
 	@echo "build docker images"
-	@cd docker/authsvc && $(MAKE) image
+	@cd build/docker/authsvc && $(MAKE) image
 
 push-images: ## Push Docker images
 	@echo "push docker images"
-	@cd docker/authsvc && $(MAKE) push
+	@cd build/docker/authsvc && $(MAKE) push
 
 
-.PHONY: all help clean deps dot build format lint verify install-hooks images push-images
+.PHONY: all help clean deps dot build format lint verify install-hooks web images push-images

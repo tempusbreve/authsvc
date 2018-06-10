@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"log"
 
 	ldap "gopkg.in/ldap.v2"
 
@@ -36,20 +35,20 @@ func (c *checker) IsAuthenticated(username string, password string) bool {
 	var res *ldap.SearchResult
 	for _, attr := range usernameAttributes {
 		if res, err = store.SearchLDAP(cn, c.cfg.BaseDN, fmt.Sprintf("(%s=%s)", attr, username), "cn"); err != nil {
-			log.Printf("WARN: error searching for baseDN %q and username %q: %v", c.cfg.BaseDN, username, err)
+			// TODO: ?
 			continue
 		}
 		switch len(res.Entries) {
 		case 1:
 			e := res.Entries[0]
 			if err = cn.Bind(e.DN, password); err == nil {
-				log.Printf("password verified: %q: %s", username, e.DN)
+				// TODO: ?
 				return true
 			}
 		case 0:
 			continue
 		default:
-			log.Printf("WARN: unexpectedly found multiple entries for baseDN %q and username %q: %+v", c.cfg.BaseDN, username, res.Entries)
+			// TODO: ?
 			continue
 		}
 	}
@@ -72,7 +71,7 @@ func recordFn(basedn string, key string) (interface{}, func(*ldap.Conn) error) {
 		)
 		for _, attr := range usernameAttributes {
 			if res, err = store.SearchLDAP(cn, basedn, fmt.Sprintf("(%s=%s)", attr, key), "*"); err != nil {
-				log.Printf("WARN: error searching for baseDN %q and key %q: %v", basedn, key, err)
+				// TODO: ?
 				continue
 			}
 			switch len(res.Entries) {
@@ -81,7 +80,7 @@ func recordFn(basedn string, key string) (interface{}, func(*ldap.Conn) error) {
 			case 1:
 				return populateDetails(attr, det, res.Entries[0])
 			default:
-				log.Printf("WARN: unexpectedly found multiple entries for baseDN %q and key %q: %+v", basedn, key, res.Entries)
+				// TODO: ?
 				continue
 			}
 		}

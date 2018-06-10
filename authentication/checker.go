@@ -1,7 +1,6 @@
 package authentication // import "breve.us/authsvc/authentication"
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gorilla/securecookie"
@@ -22,13 +21,11 @@ type cookieChecker struct {
 }
 
 func (cc *cookieChecker) IsAuthenticated(r *http.Request) string {
-	log.Printf("CookieChecker.IsAuthenticated()...")
 	if c, err := r.Cookie(cookieName); err == nil {
 		var data map[string]string
 		if err = cc.sc.Decode(cookieName, c.Value, &data); err == nil {
 			if username, ok := data["username"]; ok {
 				if d, err := cc.users.Get(username); err == nil {
-					log.Printf("CookieChecker.IsAuthenticated() details: %+v", d)
 					if d.State == "active" {
 						return username
 					}
